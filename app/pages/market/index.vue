@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import type {
   MarketStockSummary,
   ScreenerResponse,
@@ -47,6 +47,17 @@ const activeViewDetail = ref<MarketViewDetailResponse | null>(null)
 const isLoadingView = ref(false)
 const isViewModalOpen = ref(false)
 const viewBeingEdited = ref<UserMarketView | null>(null)
+
+// --- Smart Auto-Refresh State (60s loop with tab visibility awareness) ---
+const isAutoRefreshEnabled = ref(true)
+const autoRefreshIntervalSec = 60
+const countdown = ref(autoRefreshIntervalSec)
+const lastUpdatedTime = ref<Date | null>(null)
+const lastUpdatedText = ref('Just now')
+const isManualRefreshing = ref(false)
+let countdownTimer: ReturnType<typeof setInterval> | null = null
+let relativeTimeTimer: ReturnType<typeof setInterval> | null = null
+
 interface SearchEquityResult {
   symbol: string
   cleanSymbol: string
@@ -140,15 +151,94 @@ async function loadUserViews() {
   }
 }
 
-async function loadActiveView(viewId: string) {
+function updateRelativeTime() {
+  if (!lastUpdatedTime.value) {
+    lastUpdatedText.value = 'Just now'
+    return
+  }
+  const diffSec = Math.floor((Date.now() - lastUpdatedTime.value.getTime()) / 1000)
+  if (diffSec < 5) {
+    lastUpdatedText.value = 'Just now'
+  } else if (diffSec < 60) {
+    lastUpdatedText.value = `${diffSec}s ago`
+  } else {
+    const min = Math.floor(diffSec / 60)
+    lastUpdatedText.value = `${min}m ago`
+  }
+}
+
+async function loadActiveView(viewId: string, force = false) {
   try {
-    isLoadingView.value = true
-    const res = await $fetch<MarketViewDetailResponse>(`/api/market/views/${viewId}`)
+    // Only show full loading skeleton if switching to a completely different view
+    if (!activeViewDetail.value || activeViewDetail.value.view.id !== viewId) {
+      isLoadingView.value = true
+    } else {
+      isManualRefreshing.value = true
+    }
+    const queryParam = force ? '?refresh=true' : ''
+    const res = await $fetch<MarketViewDetailResponse>(`/api/market/views/${viewId}${queryParam}`)
     activeViewDetail.value = res
+    lastUpdatedTime.value = new Date()
+    countdown.value = autoRefreshIntervalSec
+    updateRelativeTime()
   } catch (err) {
     console.error('Failed to load view details:', err)
   } finally {
     isLoadingView.value = false
+    isManualRefreshing.value = false
+  }
+}
+
+async function refreshActiveView(force = false) {
+  if (!activeViewId.value) return
+  await loadActiveView(activeViewId.value, force)
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh()
+  countdown.value = autoRefreshIntervalSec
+
+  countdownTimer = setInterval(async () => {
+    // Only count down and poll if enabled, tab is active, in 'views' mode, and view selected
+    if (!isAutoRefreshEnabled.value || document.hidden || activeTab.value !== 'views' || !activeViewId.value) {
+      return
+    }
+
+    if (countdown.value > 1) {
+      countdown.value--
+    } else {
+      countdown.value = autoRefreshIntervalSec
+      await refreshActiveView(false)
+    }
+  }, 1000)
+
+  relativeTimeTimer = setInterval(updateRelativeTime, 3000)
+}
+
+function stopAutoRefresh() {
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
+  if (relativeTimeTimer) {
+    clearInterval(relativeTimeTimer)
+    relativeTimeTimer = null
+  }
+}
+
+function handleVisibilityChange() {
+  if (!document.hidden && lastUpdatedTime.value) {
+    const elapsedSec = (Date.now() - lastUpdatedTime.value.getTime()) / 1000
+    if (elapsedSec >= autoRefreshIntervalSec && isAutoRefreshEnabled.value && activeTab.value === 'views') {
+      refreshActiveView(false)
+    }
+  }
+}
+
+function toggleAutoRefresh() {
+  isAutoRefreshEnabled.value = !isAutoRefreshEnabled.value
+  if (isAutoRefreshEnabled.value) {
+    countdown.value = autoRefreshIntervalSec
   }
 }
 
@@ -366,6 +456,17 @@ function getScoreColor(score?: number) {
 onMounted(() => {
   loadUserViews()
   loadScreener()
+  startAutoRefresh()
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+  }
+})
+
+onUnmounted(() => {
+  stopAutoRefresh()
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }
 })
 </script>
 
@@ -599,15 +700,56 @@ onMounted(() => {
               >
                 Add
               </UButton>
-              <UButton
-                size="sm"
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-refresh-cw"
-                :loading="isLoadingView"
-                title="Refresh Quotes"
-                @click="activeViewId && loadActiveView(activeViewId)"
-              />
+              <!-- Smart Live Telemetry & Refresh Controller -->
+              <div class="flex items-center gap-2 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-100/70 dark:bg-neutral-800/60 px-2.5 py-1">
+                <!-- Status & Auto-refresh toggle button -->
+                <button
+                  type="button"
+                  class="flex items-center gap-1.5 text-xs font-semibold transition-colors select-none"
+                  :class="isAutoRefreshEnabled ? 'text-neutral-900 dark:text-white hover:text-primary' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'"
+                  :title="isAutoRefreshEnabled ? 'Auto-refresh active (60s loop). Click to pause.' : 'Auto-refresh paused. Click to resume.'"
+                  @click="toggleAutoRefresh"
+                >
+                  <span class="relative flex h-2 w-2">
+                    <span
+                      v-if="isAutoRefreshEnabled"
+                      class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+                    />
+                    <span
+                      class="relative inline-flex rounded-full h-2 w-2"
+                      :class="isAutoRefreshEnabled ? 'bg-emerald-500' : 'bg-neutral-400'"
+                    />
+                  </span>
+                  <span class="font-mono text-[11px]">
+                    {{ isAutoRefreshEnabled ? `Auto (${countdown}s)` : 'Paused' }}
+                  </span>
+                </button>
+
+                <span class="h-3 w-px bg-neutral-300 dark:bg-neutral-700" />
+
+                <!-- Relative Time of Last Sync -->
+                <span
+                  class="text-[11px] text-neutral-500 dark:text-neutral-400 font-mono hidden sm:inline-block"
+                  :title="lastUpdatedTime ? lastUpdatedTime.toLocaleTimeString() : ''"
+                >
+                  {{ lastUpdatedText }}
+                </span>
+
+                <!-- Manual Force-Refresh Button -->
+                <button
+                  type="button"
+                  class="flex items-center justify-center p-1 rounded-md text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-200/60 dark:hover:bg-neutral-700/60 transition-all"
+                  :class="{ 'opacity-50 pointer-events-none': isManualRefreshing || isLoadingView }"
+                  title="Force refresh quotes from Yahoo Finance"
+                  @click="activeViewId && refreshActiveView(true)"
+                >
+                  <UIcon
+                    name="i-lucide-refresh-cw"
+                    class="h-3.5 w-3.5"
+                    :class="{ 'animate-spin text-primary': isManualRefreshing || isLoadingView }"
+                  />
+                </button>
+              </div>
               <!-- Layout Switcher (Table vs Cards) -->
               <div class="flex items-center rounded-xl border border-default/60 p-0.5 bg-muted/30">
                 <button

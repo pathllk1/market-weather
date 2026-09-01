@@ -5,6 +5,8 @@ import type { UserMarketView, ViewEquityOhlcv, MarketViewDetailResponse } from '
 export default defineEventHandler(async (event): Promise<MarketViewDetailResponse> => {
   const userId = event.context.user?.id || 'guest_default_user'
   const viewId = getRouterParam(event, 'id')
+  const query = getQuery(event)
+  const forceRefresh = query.refresh === 'true' || query.refresh === '1'
 
   if (!viewId) {
     throw createError({
@@ -71,8 +73,8 @@ export default defineEventHandler(async (event): Promise<MarketViewDetailRespons
     dbMap.set(String(r.symbol).toUpperCase(), r)
   }
 
-  // 3. Fetch live quote data from Yahoo Finance (cached 60s)
-  const liveQuotes = await getLiveQuotes(symbols)
+  // 3. Fetch live quote data from Yahoo Finance (cached 60s, bypassed on forceRefresh)
+  const liveQuotes = await getLiveQuotes(symbols, forceRefresh)
 
   // 4. Merge DB technical indicators with Yahoo real-time OHLCV
   const equities: ViewEquityOhlcv[] = symbols.map((symbol) => {

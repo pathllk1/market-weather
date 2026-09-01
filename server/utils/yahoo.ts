@@ -38,18 +38,19 @@ export function toYahooTicker(symbol: string): string {
 
 /**
  * Fetches real-time / delayed quotes for a list of NSE equity symbols.
- * Employs a 60-second cache and handles per-symbol failures gracefully.
+ * Employs a 60-second cache (with 10-second minimum clamp on forced refresh) and handles per-symbol failures gracefully.
  */
-export async function getLiveQuotes(symbols: string[]): Promise<Record<string, LiveQuote>> {
+export async function getLiveQuotes(symbols: string[], forceRefresh = false): Promise<Record<string, LiveQuote>> {
   const results: Record<string, LiveQuote> = {}
   const now = Date.now()
   const symbolsToFetch: string[] = []
 
-  // 1. Check cache first
+  // 1. Check cache first (forced refresh requires at least 10s age)
   for (const rawSymbol of symbols) {
     const symbol = rawSymbol.trim().toUpperCase()
     const cached = quoteCache.get(symbol)
-    if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+    const effectiveTtl = forceRefresh ? 10_000 : CACHE_TTL_MS
+    if (cached && now - cached.timestamp < effectiveTtl) {
       results[symbol] = cached.quote
     } else {
       symbolsToFetch.push(symbol)
