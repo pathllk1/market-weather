@@ -72,6 +72,7 @@ const { user, isAuthenticated, isAdmin, logout } = useAuth()
               :color="isAdmin ? 'error' : 'primary'"
               variant="subtle"
               size="xs"
+              class="hidden sm:inline-flex"
             >
               {{ user?.role?.toUpperCase() }}
             </UBadge>
@@ -81,6 +82,7 @@ const { user, isAuthenticated, isAdmin, logout } = useAuth()
               variant="ghost"
               size="xs"
               icon="i-lucide-log-out"
+              class="hidden md:inline-flex"
               @click="logout"
             >
               Sign Out
@@ -93,6 +95,7 @@ const { user, isAuthenticated, isAdmin, logout } = useAuth()
               variant="ghost"
               size="xs"
               icon="i-lucide-log-in"
+              class="hidden sm:inline-flex"
             >
               Sign In
             </UButton>
@@ -103,21 +106,25 @@ const { user, isAuthenticated, isAdmin, logout } = useAuth()
               variant="solid"
               size="xs"
               icon="i-lucide-user-plus"
+              class="hidden sm:inline-flex"
             >
               Create Account
             </UButton>
           </template>
+
+          <!-- Mobile Hamburger Trigger & Slideover + Bottom Nav -->
+          <AppMobileMenu />
         </ClientOnly>
       </div>
     </header>
 
-    <!-- Main Content (Padded to clear fixed header and footer) -->
-    <main class="w-full flex-1 pt-12 pb-8">
+    <!-- Main Content (Padded to clear fixed header and mobile bottom bar) -->
+    <main class="w-full flex-1 pt-12 pb-20 md:pb-8">
       <slot />
     </main>
 
-    <!-- Fixed Minimal Footer -->
-    <footer class="fixed bottom-0 inset-x-0 z-50 h-8 border-t border-default bg-background/90 backdrop-blur flex items-center justify-between px-4 text-[11px] text-muted">
+    <!-- Desktop Minimal Footer -->
+    <footer class="hidden md:flex fixed bottom-0 inset-x-0 z-30 h-8 border-t border-default bg-background/90 backdrop-blur items-center justify-between px-4 text-[11px] text-muted">
       <div class="flex items-center gap-2">
         <span>Enterprise Operations System</span>
         <span>•</span>

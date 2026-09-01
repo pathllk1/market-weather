@@ -43,7 +43,7 @@ const { user, logout } = useAuth()
           {{ user?.email }}
         </span>
 
-        <UBadge color="error" variant="subtle" size="xs">
+        <UBadge color="error" variant="subtle" size="xs" class="hidden sm:inline-flex">
           ADMIN
         </UBadge>
 
@@ -52,20 +52,24 @@ const { user, logout } = useAuth()
           variant="ghost"
           size="xs"
           icon="i-lucide-log-out"
+          class="hidden md:inline-flex"
           @click="logout"
         >
           Sign Out
         </UButton>
+
+        <!-- Mobile Menu Trigger & Bottom Bar -->
+        <AppMobileMenu />
       </div>
     </header>
 
-    <!-- Main Content (Full Width) -->
-    <main class="w-full flex-1 pt-12 pb-8 p-4 sm:p-6">
+    <!-- Main Content (Full Width, padded for mobile bottom bar) -->
+    <main class="w-full flex-1 pt-12 pb-20 md:pb-8 p-4 sm:p-6">
       <slot />
     </main>
 
-    <!-- Fixed Minimal Footer -->
-    <footer class="fixed bottom-0 inset-x-0 z-50 h-8 border-t border-default bg-background/90 backdrop-blur flex items-center justify-between px-4 text-[11px] text-muted">
+    <!-- Desktop Minimal Footer -->
+    <footer class="hidden md:flex fixed bottom-0 inset-x-0 z-30 h-8 border-t border-default bg-background/90 backdrop-blur items-center justify-between px-4 text-[11px] text-muted">
       <div class="flex items-center gap-2">
         <span>Admin Operations Console</span>
         <span>•</span>
