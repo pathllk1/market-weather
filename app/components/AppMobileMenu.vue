@@ -32,6 +32,12 @@ const navItems = computed(() => {
       icon: 'i-lucide-trending-up'
     },
     {
+      to: '/weather',
+      label: 'Weather & AQI',
+      description: 'National air quality & 51-city matrix',
+      icon: 'i-lucide-cloud-sun'
+    },
+    {
       to: '/analytics/stocks',
       label: 'Stock Analytics',
       description: 'Technical radar & historical data',
@@ -64,9 +70,9 @@ const bottomBarItems = computed(() => {
       icon: 'i-lucide-trending-up'
     },
     {
-      to: '/analytics/stocks',
-      label: 'Analytics',
-      icon: 'i-lucide-line-chart'
+      to: '/weather',
+      label: 'Weather',
+      icon: 'i-lucide-cloud-sun'
     }
   ]
 
@@ -124,7 +130,11 @@ defineExpose({
       title="Navigation Menu"
       side="right"
       :ui="{
-        content: 'max-w-xs sm:max-w-sm w-full bg-background'
+        overlay: 'fixed inset-0 bg-neutral-950/60 backdrop-blur-xs z-50',
+        content: 'fixed inset-y-0 right-0 z-50 w-full max-w-xs sm:max-w-sm bg-white dark:bg-neutral-900 border-l border-neutral-200 dark:border-neutral-800 shadow-2xl flex flex-col focus:outline-none',
+        header: 'px-5 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between min-h-14 bg-white dark:bg-neutral-900',
+        body: 'flex-1 overflow-y-auto p-5 space-y-5 bg-white dark:bg-neutral-900',
+        footer: 'p-4 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950'
       }"
     >
       <template #header>
@@ -136,16 +146,17 @@ defineExpose({
           >
             <UIcon
               name="i-lucide-layout-grid"
-              class="text-lg"
+              class="text-lg text-primary"
             />
-            <span>ENTERPRISE ERP</span>
+            <span class="font-extrabold text-neutral-900 dark:text-white">ENTERPRISE ERP</span>
           </NuxtLink>
 
           <UButton
             icon="i-lucide-x"
             color="neutral"
             variant="ghost"
-            size="xs"
+            size="sm"
+            class="rounded-lg text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
             aria-label="Close Navigation Menu"
             @click="isOpen = false"
           />
@@ -153,18 +164,18 @@ defineExpose({
       </template>
 
       <template #body>
-        <div class="space-y-6">
+        <div class="space-y-6 bg-white dark:bg-neutral-900">
           <!-- User Profile Card (if authenticated) -->
           <div
             v-if="isAuthenticated"
-            class="p-3.5 rounded-xl border border-default bg-muted/20 space-y-2.5"
+            class="p-4 rounded-xl border border-neutral-200 dark:border-neutral-700/70 bg-neutral-50 dark:bg-neutral-800/80 space-y-2.5 shadow-xs"
           >
             <div class="flex items-center gap-3">
-              <div class="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+              <div class="w-10 h-10 rounded-full bg-primary/10 dark:bg-primary/20 border border-primary/30 flex items-center justify-center text-primary font-bold text-sm shrink-0">
                 {{ user?.email?.charAt(0).toUpperCase() || 'U' }}
               </div>
               <div class="min-w-0 flex-1">
-                <div class="text-xs font-bold text-highlight truncate">
+                <div class="text-xs font-bold text-neutral-900 dark:text-white truncate">
                   {{ user?.email }}
                 </div>
                 <div class="flex items-center gap-1.5 mt-0.5">
@@ -172,12 +183,12 @@ defineExpose({
                     :color="isAdmin ? 'error' : 'primary'"
                     variant="subtle"
                     size="xs"
-                    class="font-mono text-[9px] px-1.5 py-0"
+                    class="font-mono text-[9px] px-1.5 py-0 font-bold"
                   >
                     {{ user?.role?.toUpperCase() }}
                   </UBadge>
-                  <span class="text-[10px] text-muted flex items-center gap-1">
-                    <span class="w-1.5 h-1.5 rounded-full bg-success inline-block" />
+                  <span class="text-[10px] text-neutral-500 dark:text-neutral-400 flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
                     Active
                   </span>
                 </div>
@@ -188,18 +199,18 @@ defineExpose({
           <!-- Guest Action Banner (if not logged in) -->
           <div
             v-else
-            class="p-3.5 rounded-xl border border-default bg-muted/20 space-y-2.5"
+            class="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/80 space-y-3"
           >
-            <p class="text-xs text-muted">
+            <p class="text-xs text-neutral-600 dark:text-neutral-400">
               Sign in to access real-time market views, customized watchlists, and analytics.
             </p>
             <div class="grid grid-cols-2 gap-2">
               <UButton
                 to="/login"
                 size="xs"
-                variant="ghost"
+                variant="outline"
                 icon="i-lucide-log-in"
-                class="justify-center"
+                class="justify-center font-semibold"
                 @click="isOpen = false"
               >
                 Sign In
@@ -210,7 +221,7 @@ defineExpose({
                 color="primary"
                 variant="solid"
                 icon="i-lucide-user-plus"
-                class="justify-center"
+                class="justify-center font-semibold"
                 @click="isOpen = false"
               >
                 Register
@@ -219,8 +230,8 @@ defineExpose({
           </div>
 
           <!-- Navigation Links -->
-          <div class="space-y-1">
-            <span class="text-[10px] font-bold uppercase tracking-wider text-muted px-2 block mb-1">
+          <div class="space-y-1.5">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 px-2 block mb-1">
               Application Pages
             </span>
 
@@ -231,7 +242,7 @@ defineExpose({
               class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all group"
               :class="isRouteActive(item.to)
                 ? 'bg-primary text-white shadow-sm'
-                : 'text-muted hover:text-highlight hover:bg-muted/30'"
+                : 'text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800/70'"
               @click="isOpen = false"
             >
               <UIcon
@@ -240,12 +251,12 @@ defineExpose({
                 :class="isRouteActive(item.to) ? 'text-white' : 'text-primary'"
               />
               <div class="min-w-0 flex-1">
-                <div class="truncate">
+                <div class="truncate font-bold">
                   {{ item.label }}
                 </div>
                 <div
                   class="text-[10px] truncate"
-                  :class="isRouteActive(item.to) ? 'text-white/80' : 'text-muted'"
+                  :class="isRouteActive(item.to) ? 'text-white/80' : 'text-neutral-500 dark:text-neutral-400'"
                 >
                   {{ item.description }}
                 </div>
@@ -253,19 +264,19 @@ defineExpose({
               <UIcon
                 name="i-lucide-chevron-right"
                 class="text-xs shrink-0 transition-transform group-hover:translate-x-0.5"
-                :class="isRouteActive(item.to) ? 'text-white/80' : 'text-muted'"
+                :class="isRouteActive(item.to) ? 'text-white/80' : 'text-neutral-400'"
               />
             </NuxtLink>
           </div>
 
           <!-- Preferences & Tools Section -->
-          <div class="space-y-2 pt-2 border-t border-default/50">
-            <span class="text-[10px] font-bold uppercase tracking-wider text-muted px-2 block">
+          <div class="space-y-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 px-2 block">
               Preferences & System
             </span>
 
-            <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-muted/15 border border-default/40">
-              <span class="text-xs font-medium text-highlight flex items-center gap-2">
+            <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700/60">
+              <span class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex items-center gap-2">
                 <UIcon
                   name="i-lucide-sun-moon"
                   class="text-sm text-primary"
@@ -277,12 +288,12 @@ defineExpose({
 
             <NuxtLink
               to="/"
-              class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs text-muted hover:text-highlight hover:bg-muted/20 transition-all"
+              class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800/50 transition-all font-medium"
               @click="isOpen = false"
             >
               <UIcon
                 name="i-lucide-home"
-                class="text-sm"
+                class="text-sm text-primary"
               />
               <span>Return to Portal Home</span>
             </NuxtLink>
@@ -299,7 +310,7 @@ defineExpose({
             size="sm"
             icon="i-lucide-log-out"
             block
-            class="w-full justify-center font-semibold"
+            class="w-full justify-center font-bold"
             @click="handleSignOut"
           >
             Sign Out Account
@@ -307,7 +318,7 @@ defineExpose({
 
           <p
             v-else
-            class="text-[11px] text-muted text-center py-1"
+            class="text-[11px] text-neutral-400 text-center py-1 font-mono"
           >
             Encrypted Enterprise Architecture
           </p>
@@ -318,14 +329,14 @@ defineExpose({
     <!-- Mobile Bottom Navigation Bar (1-Thumb Easy Access) -->
     <nav
       v-if="props.showBottomBar !== false"
-      class="md:hidden fixed bottom-0 inset-x-0 z-40 h-14 bg-background/95 backdrop-blur-lg border-t border-default flex items-center justify-around px-2 shadow-lg"
+      class="md:hidden fixed bottom-0 inset-x-0 z-40 h-14 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-lg border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-around px-2 shadow-lg"
     >
       <NuxtLink
         v-for="tab in bottomBarItems"
         :key="tab.to"
         :to="tab.to"
         class="flex flex-col items-center justify-center flex-1 h-full py-1 text-center transition-colors"
-        :class="isRouteActive(tab.to) ? 'text-primary font-bold' : 'text-muted hover:text-highlight'"
+        :class="isRouteActive(tab.to) ? 'text-primary font-bold' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'"
       >
         <UIcon
           :name="tab.icon"
@@ -340,7 +351,7 @@ defineExpose({
       <!-- More / Menu Drawer Toggle -->
       <button
         type="button"
-        class="flex flex-col items-center justify-center flex-1 h-full py-1 text-center text-muted hover:text-highlight transition-colors"
+        class="flex flex-col items-center justify-center flex-1 h-full py-1 text-center text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors"
         :class="{ 'text-primary font-bold': isOpen }"
         aria-label="Open Full Menu"
         @click="isOpen = !isOpen"

@@ -5,9 +5,9 @@ const { user, logout } = useAuth()
 </script>
 
 <template>
-  <div class="w-full min-h-screen flex flex-col bg-background text-foreground">
+  <div class="w-full min-h-screen flex flex-col bg-neutral-50/50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100">
     <!-- Fixed Minimal Header -->
-    <header class="fixed top-0 inset-x-0 z-50 h-12 border-b border-default bg-background/90 backdrop-blur flex items-center px-4 justify-between">
+    <header class="fixed top-0 inset-x-0 z-40 h-12 border-b border-neutral-200 dark:border-neutral-800 bg-white/95 dark:bg-neutral-900/95 backdrop-blur flex items-center px-4 justify-between">
       <div class="flex items-center gap-6">
         <NuxtLink to="/admin/security" class="flex items-center gap-2 font-bold text-sm tracking-tight text-primary">
           <UIcon name="i-lucide-shield-alert" class="text-lg text-primary" />
@@ -23,6 +23,15 @@ const { user, logout } = useAuth()
             icon="i-lucide-layout-dashboard"
           >
             User Area
+          </UButton>
+          <UButton
+            to="/weather"
+            variant="ghost"
+            size="xs"
+            color="neutral"
+            icon="i-lucide-cloud-sun"
+          >
+            Weather & AQI
           </UButton>
           <UButton
             to="/admin/security"
