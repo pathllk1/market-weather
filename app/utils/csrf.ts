@@ -1,0 +1,8 @@
+/**
+ * Extract CSRF token from document.cookie
+ */
+export function getCsrfTokenFromCookie(): string | null {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp('(^|;\\s*)csrf_token=([^;]+)'))
+  return match && match[2] ? decodeURIComponent(match[2]) : null
+}
