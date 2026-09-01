@@ -36,7 +36,8 @@ const activeTab = ref('chart')
 
 const tabItems = [
   { label: 'Candlestick Chart & Range', icon: 'i-lucide-candlestick-chart', value: 'chart' },
-  { label: 'Technical Indicators Radar', icon: 'i-lucide-gauge', value: 'radar' }
+  { label: 'Technical Indicators Radar', icon: 'i-lucide-gauge', value: 'radar' },
+  { label: 'Fundamental Analysis', icon: 'i-lucide-pie-chart', value: 'fundamentals' }
 ]
 
 async function loadStockDetails() {
@@ -65,7 +66,10 @@ function getScoreColor(score: number) {
 <template>
   <UModal
     v-model:open="isOpen"
-    :ui="{ content: 'sm:max-w-4xl' }"
+    :ui="{
+      content: 'sm:max-w-5xl md:max-w-6xl lg:max-w-7xl xl:max-w-[1400px] w-[calc(100vw-2rem)] max-h-[92vh] flex flex-col',
+      body: 'flex-1 overflow-y-auto p-4 sm:p-6'
+    }"
   >
     <template #header>
       <div
@@ -176,6 +180,17 @@ function getScoreColor(score: number) {
         >
           <MarketIndicatorRadar
             :signals="stockData.signals"
+            :current-price="stockData.currentPrice"
+          />
+        </div>
+
+        <!-- Tab 3: Fundamental Analysis -->
+        <div
+          v-else-if="activeTab === 'fundamentals'"
+          class="pt-2"
+        >
+          <MarketStockFundamentals
+            :symbol="stockData.symbol"
             :current-price="stockData.currentPrice"
           />
         </div>

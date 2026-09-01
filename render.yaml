@@ -3,7 +3,7 @@ services:
     name: market-weather
     runtime: node
     plan: free
-    region: oregon # or frankfurt, singapore, ohio
+    region: singapore # or frankfurt, singapore, ohio, oregon
     buildCommand: npm install && npm run build
     startCommand: node .output/server/index.mjs
     envVars:

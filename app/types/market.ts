@@ -124,3 +124,105 @@ export interface MarketViewDetailResponse {
   view: UserMarketView
   equities: ViewEquityOhlcv[]
 }
+
+export interface CompanyOfficer {
+  name: string
+  title: string
+  age?: number
+  totalPay?: number
+}
+
+export interface StockFundamentalDetails {
+  symbol: string
+  companyName?: string
+  currency?: string
+  currentPrice?: number
+  profile: {
+    sector?: string
+    industry?: string
+    website?: string
+    fullTimeEmployees?: number
+    city?: string
+    country?: string
+    longBusinessSummary?: string
+    companyOfficers?: CompanyOfficer[]
+  }
+  valuation: {
+    marketCap?: number
+    enterpriseValue?: number
+    trailingPE?: number
+    forwardPE?: number
+    pegRatio?: number
+    priceToBook?: number
+    priceToSales?: number
+    enterpriseToRevenue?: number
+    enterpriseToEbitda?: number
+    beta?: number
+    sharesOutstanding?: number
+    floatShares?: number
+    bookValue?: number
+    heldPercentInsiders?: number
+    heldPercentInstitutions?: number
+  }
+  financials: {
+    totalRevenue?: number
+    revenueGrowth?: number
+    revenuePerShare?: number
+    grossProfits?: number
+    grossMargins?: number
+    ebitda?: number
+    ebitdaMargins?: number
+    operatingMargins?: number
+    profitMargins?: number
+    netIncome?: number
+    trailingEps?: number
+    forwardEps?: number
+    earningsGrowth?: number
+    returnOnAssets?: number
+    returnOnEquity?: number
+  }
+  balanceSheet: {
+    totalCash?: number
+    totalCashPerShare?: number
+    totalDebt?: number
+    debtToEquity?: number
+    currentRatio?: number
+    quickRatio?: number
+  }
+  dividends: {
+    dividendRate?: number
+    dividendYield?: number
+    payoutRatio?: number
+    fiveYearAvgDividendYield?: number
+    exDividendDate?: string
+  }
+  analystTargets: {
+    targetMeanPrice?: number
+    targetHighPrice?: number
+    targetLowPrice?: number
+    targetMedianPrice?: number
+    recommendationKey?: string
+    recommendationMean?: number
+    numberOfAnalystOpinions?: number
+    recommendationTrend?: {
+      strongBuy: number
+      buy: number
+      hold: number
+      sell: number
+      strongSell: number
+    }
+  }
+  earningsTrend?: Array<{
+    date: number
+    revenue: number
+    earnings: number
+    profitMargin?: number
+  }>
+  quarterlyEarnings?: Array<{
+    date: string
+    revenue: number
+    earnings: number
+    profitMargin?: number
+  }>
+}
+
