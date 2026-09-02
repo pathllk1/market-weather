@@ -73,6 +73,14 @@ const showQuickSearchDropdown = ref(false)
 const activeSuggestionIndex = ref(-1)
 const allAvailableSymbols = ref<{ symbol: string, company_name: string }[]>([])
 const viewDisplayMode = ref<'table' | 'cards'>('table')
+const hasUserManuallyToggledViewMode = ref(false)
+
+function checkResponsiveViewMode() {
+  if (typeof window === 'undefined') return
+  if (!hasUserManuallyToggledViewMode.value) {
+    viewDisplayMode.value = window.innerWidth < 768 ? 'cards' : 'table'
+  }
+}
 
 // --- Detail Modal State (Charts & Radar) ---
 const selectedSymbol = ref<string | null>(null)
@@ -204,11 +212,16 @@ function startAutoRefresh() {
       return
     }
 
+    // Do not count down while a view fetch or refresh is actively in progress
+    if (isManualRefreshing.value || isLoadingView.value) {
+      return
+    }
+
     if (countdown.value > 1) {
       countdown.value--
     } else {
       countdown.value = autoRefreshIntervalSec
-      await refreshActiveView(false)
+      await refreshActiveView(true)
     }
   }, 1000)
 
@@ -230,7 +243,7 @@ function handleVisibilityChange() {
   if (!document.hidden && lastUpdatedTime.value) {
     const elapsedSec = (Date.now() - lastUpdatedTime.value.getTime()) / 1000
     if (elapsedSec >= autoRefreshIntervalSec && isAutoRefreshEnabled.value && activeTab.value === 'views') {
-      refreshActiveView(false)
+      refreshActiveView(true)
     }
   }
 }
@@ -454,6 +467,10 @@ function getScoreColor(score?: number) {
 }
 
 onMounted(() => {
+  checkResponsiveViewMode()
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', checkResponsiveViewMode)
+  }
   loadUserViews()
   loadScreener()
   startAutoRefresh()
@@ -464,6 +481,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopAutoRefresh()
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', checkResponsiveViewMode)
+  }
   if (typeof document !== 'undefined') {
     document.removeEventListener('visibilitychange', handleVisibilityChange)
   }
@@ -590,7 +610,7 @@ onUnmounted(() => {
           v-if="activeViewDetail?.view"
           class="relative z-30 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5 shadow-sm"
         >
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
             <div class="space-y-1 min-w-0">
               <div class="flex items-center gap-2.5">
                 <h2 class="text-lg font-black text-neutral-900 dark:text-white truncate">
@@ -616,178 +636,188 @@ onUnmounted(() => {
               </p>
             </div>
 
-            <!-- Quick Add Equity Input Toolbar with Live Autocomplete Dropdown -->
-            <div class="relative z-40 flex items-center gap-2 shrink-0">
-              <div class="relative w-56 sm:w-72">
-                <UInput
-                  v-model="quickAddSymbol"
-                  placeholder="Type symbol to add (e.g. TATA, INFY)..."
-                  size="sm"
-                  icon="i-lucide-search"
-                  @focus="quickSearchSuggestions.length > 0 ? (showQuickSearchDropdown = true) : null"
-                  @keydown="onQuickSearchKeydown"
-                />
+            <!-- Action & Search Toolbar (Full-width on mobile, expanded on desktop) -->
+            <div class="relative z-40 flex flex-col md:flex-row items-stretch md:items-center gap-3 w-full xl:w-auto">
+              <!-- Quick Add Equity Input Toolbar with Live Autocomplete Dropdown -->
+              <div class="flex items-center gap-2 w-full md:w-auto flex-1">
+                <div class="relative w-full md:w-80 lg:w-96 xl:w-[420px]">
+                  <UInput
+                    v-model="quickAddSymbol"
+                    placeholder="Type symbol to add (e.g. TATA, INFY)..."
+                    size="sm"
+                    class="w-full"
+                    icon="i-lucide-search"
+                    @focus="quickSearchSuggestions.length > 0 ? (showQuickSearchDropdown = true) : null"
+                    @keydown="onQuickSearchKeydown"
+                  />
 
-                <!-- Floating Dropdown Suggestions while typing (Solid 100% Opaque Background) -->
-                <div
-                  v-if="showQuickSearchDropdown && (quickSearchSuggestions.length > 0 || isQuickSearching)"
-                  class="absolute left-0 top-full z-[100] mt-1.5 max-h-80 w-full sm:w-96 overflow-y-auto rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-1.5 shadow-2xl ring-1 ring-black/10 dark:ring-white/10 divide-y divide-neutral-100 dark:divide-neutral-800"
-                >
+                  <!-- Floating Dropdown Suggestions while typing (Solid 100% Opaque Background) -->
                   <div
-                    v-if="isQuickSearching"
-                    class="flex items-center justify-center p-3.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400"
+                    v-if="showQuickSearchDropdown && (quickSearchSuggestions.length > 0 || isQuickSearching)"
+                    class="absolute left-0 top-full z-[100] mt-1.5 max-h-80 w-full overflow-y-auto rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-1.5 shadow-2xl ring-1 ring-black/10 dark:ring-white/10 divide-y divide-neutral-100 dark:divide-neutral-800"
                   >
-                    <UIcon
-                      name="i-lucide-loader-2"
-                      class="mr-2 h-4 w-4 animate-spin text-primary"
-                    />
-                    <span>Searching 494 Indian equities...</span>
-                  </div>
-
-                  <div
-                    v-else-if="quickSearchSuggestions.length === 0"
-                    class="p-3.5 text-center text-xs font-medium text-neutral-500 dark:text-neutral-400"
-                  >
-                    No matching equities found
-                  </div>
-
-                  <div
-                    v-for="(item, idx) in quickSearchSuggestions"
-                    :key="item.symbol"
-                    class="flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 transition-colors"
-                    :class="activeSuggestionIndex === idx ? 'bg-primary/15 dark:bg-primary/25' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'"
-                    @click="addSuggestedEquity(item.symbol)"
-                  >
-                    <div class="min-w-0 flex-1 pr-2">
-                      <div class="flex items-center gap-1.5">
-                        <span class="font-black text-xs text-neutral-900 dark:text-white">{{ item.cleanSymbol }}</span>
-                        <span class="rounded bg-neutral-100 dark:bg-neutral-800 px-1 py-0.2 font-mono text-[9px] font-semibold text-neutral-600 dark:text-neutral-400">NSE</span>
-                        <span
-                          v-if="activeViewDetail?.view.symbols.includes(item.symbol)"
-                          class="rounded bg-emerald-500/15 px-1.5 py-0.2 text-[9px] font-bold text-emerald-600 dark:text-emerald-400"
-                        >
-                          In View
-                        </span>
-                      </div>
-                      <div class="truncate text-[11px] font-normal text-neutral-500 dark:text-neutral-400">
-                        {{ item.companyName }}
-                      </div>
+                    <div
+                      v-if="isQuickSearching"
+                      class="flex items-center justify-center p-3.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400"
+                    >
+                      <UIcon
+                        name="i-lucide-loader-2"
+                        class="mr-2 h-4 w-4 animate-spin text-primary"
+                      />
+                      <span>Searching 494 Indian equities...</span>
                     </div>
 
-                    <div class="flex items-center gap-2 shrink-0">
-                      <span
-                        v-if="item.price"
-                        class="font-mono text-xs font-black text-neutral-900 dark:text-white"
-                      >₹{{ item.price }}</span>
-                      <UButton
-                        size="xs"
-                        color="primary"
-                        variant="soft"
-                        :disabled="activeViewDetail?.view.symbols.includes(item.symbol)"
-                        icon="i-lucide-plus"
-                      />
+                    <div
+                      v-else-if="quickSearchSuggestions.length === 0"
+                      class="p-3.5 text-center text-xs font-medium text-neutral-500 dark:text-neutral-400"
+                    >
+                      No matching equities found
+                    </div>
+
+                    <div
+                      v-for="(item, idx) in quickSearchSuggestions"
+                      :key="item.symbol"
+                      class="flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 transition-colors"
+                      :class="activeSuggestionIndex === idx ? 'bg-primary/15 dark:bg-primary/25' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'"
+                      @click="addSuggestedEquity(item.symbol)"
+                    >
+                      <div class="min-w-0 flex-1 pr-2">
+                        <div class="flex items-center gap-1.5">
+                          <span class="font-black text-xs text-neutral-900 dark:text-white">{{ item.cleanSymbol }}</span>
+                          <span class="rounded bg-neutral-100 dark:bg-neutral-800 px-1 py-0.2 font-mono text-[9px] font-semibold text-neutral-600 dark:text-neutral-400">NSE</span>
+                          <span
+                            v-if="activeViewDetail?.view.symbols.includes(item.symbol)"
+                            class="rounded bg-emerald-500/15 px-1.5 py-0.2 text-[9px] font-bold text-emerald-600 dark:text-emerald-400"
+                          >
+                            In View
+                          </span>
+                        </div>
+                        <div class="truncate text-[11px] font-normal text-neutral-500 dark:text-neutral-400">
+                          {{ item.companyName }}
+                        </div>
+                      </div>
+
+                      <div class="flex items-center gap-2 shrink-0">
+                        <span
+                          v-if="item.price"
+                          class="font-mono text-xs font-black text-neutral-900 dark:text-white"
+                        >₹{{ item.price }}</span>
+                        <UButton
+                          size="xs"
+                          color="primary"
+                          variant="soft"
+                          :disabled="activeViewDetail?.view.symbols.includes(item.symbol)"
+                          icon="i-lucide-plus"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
+
+                <UButton
+                  size="sm"
+                  color="primary"
+                  variant="solid"
+                  class="shrink-0"
+                  :disabled="!quickAddSymbol.trim()"
+                  @click="handleQuickAddEquity"
+                >
+                  Add
+                </UButton>
               </div>
 
-              <UButton
-                size="sm"
-                color="primary"
-                variant="solid"
-                :disabled="!quickAddSymbol.trim()"
-                @click="handleQuickAddEquity"
-              >
-                Add
-              </UButton>
-              <!-- Smart Live Telemetry & Refresh Controller -->
-              <div class="flex items-center gap-2 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-100/70 dark:bg-neutral-800/60 px-2.5 py-1">
-                <!-- Status & Auto-refresh toggle button -->
-                <button
-                  type="button"
-                  class="flex items-center gap-1.5 text-xs font-semibold transition-colors select-none"
-                  :class="isAutoRefreshEnabled ? 'text-neutral-900 dark:text-white hover:text-primary' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'"
-                  :title="isAutoRefreshEnabled ? 'Auto-refresh active (60s loop). Click to pause.' : 'Auto-refresh paused. Click to resume.'"
-                  @click="toggleAutoRefresh"
-                >
-                  <span class="relative flex h-2 w-2">
-                    <span
-                      v-if="isAutoRefreshEnabled"
-                      class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
-                    />
-                    <span
-                      class="relative inline-flex rounded-full h-2 w-2"
-                      :class="isAutoRefreshEnabled ? 'bg-emerald-500' : 'bg-neutral-400'"
-                    />
+              <!-- Controls Toolbar -->
+              <div class="flex items-center justify-between md:justify-end gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+                <!-- Smart Live Telemetry & Refresh Controller -->
+                <div class="flex items-center gap-2 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-100/70 dark:bg-neutral-800/60 px-2.5 py-1">
+                  <!-- Status & Auto-refresh toggle button -->
+                  <button
+                    type="button"
+                    class="flex items-center gap-1.5 text-xs font-semibold transition-colors select-none"
+                    :class="isAutoRefreshEnabled ? 'text-neutral-900 dark:text-white hover:text-primary' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'"
+                    :title="isAutoRefreshEnabled ? 'Auto-refresh active (60s loop). Click to pause.' : 'Auto-refresh paused. Click to resume.'"
+                    @click="toggleAutoRefresh"
+                  >
+                    <span class="relative flex h-2 w-2">
+                      <span
+                        v-if="isAutoRefreshEnabled"
+                        class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+                      />
+                      <span
+                        class="relative inline-flex rounded-full h-2 w-2"
+                        :class="isAutoRefreshEnabled ? 'bg-emerald-500' : 'bg-neutral-400'"
+                      />
+                    </span>
+                    <span class="font-mono text-[11px]">
+                      {{ isAutoRefreshEnabled ? `Auto (${countdown}s)` : 'Paused' }}
+                    </span>
+                  </button>
+
+                  <span class="h-3 w-px bg-neutral-300 dark:bg-neutral-700" />
+
+                  <!-- Relative Time of Last Sync -->
+                  <span
+                    class="text-[11px] text-neutral-500 dark:text-neutral-400 font-mono hidden sm:inline-block"
+                    :title="lastUpdatedTime ? lastUpdatedTime.toLocaleTimeString() : ''"
+                  >
+                    {{ lastUpdatedText }}
                   </span>
-                  <span class="font-mono text-[11px]">
-                    {{ isAutoRefreshEnabled ? `Auto (${countdown}s)` : 'Paused' }}
-                  </span>
-                </button>
 
-                <span class="h-3 w-px bg-neutral-300 dark:bg-neutral-700" />
+                  <!-- Manual Force-Refresh Button -->
+                  <button
+                    type="button"
+                    class="flex items-center justify-center p-1 rounded-md text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-200/60 dark:hover:bg-neutral-700/60 transition-all"
+                    :class="{ 'opacity-50 pointer-events-none': isManualRefreshing || isLoadingView }"
+                    title="Force refresh quotes from Yahoo Finance"
+                    @click="activeViewId && refreshActiveView(true)"
+                  >
+                    <UIcon
+                      name="i-lucide-refresh-cw"
+                      class="h-3.5 w-3.5"
+                      :class="{ 'animate-spin text-primary': isManualRefreshing || isLoadingView }"
+                    />
+                  </button>
+                </div>
 
-                <!-- Relative Time of Last Sync -->
-                <span
-                  class="text-[11px] text-neutral-500 dark:text-neutral-400 font-mono hidden sm:inline-block"
-                  :title="lastUpdatedTime ? lastUpdatedTime.toLocaleTimeString() : ''"
-                >
-                  {{ lastUpdatedText }}
-                </span>
+                <!-- Layout Switcher (Table vs Cards) -->
+                <div class="flex items-center rounded-xl border border-default/60 p-0.5 bg-muted/30">
+                  <button
+                    type="button"
+                    class="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all"
+                    :class="viewDisplayMode === 'table' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                    title="Institutional Table View"
+                    @click="viewDisplayMode = 'table'; hasUserManuallyToggledViewMode = true"
+                  >
+                    <UIcon
+                      name="i-lucide-table-properties"
+                      class="h-3.5 w-3.5"
+                    />
+                    <span>Table</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all"
+                    :class="viewDisplayMode === 'cards' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                    title="Card Matrix View"
+                    @click="viewDisplayMode = 'cards'; hasUserManuallyToggledViewMode = true"
+                  >
+                    <UIcon
+                      name="i-lucide-layout-grid"
+                      class="h-3.5 w-3.5"
+                    />
+                    <span>Cards</span>
+                  </button>
+                </div>
 
-                <!-- Manual Force-Refresh Button -->
-                <button
-                  type="button"
-                  class="flex items-center justify-center p-1 rounded-md text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-200/60 dark:hover:bg-neutral-700/60 transition-all"
-                  :class="{ 'opacity-50 pointer-events-none': isManualRefreshing || isLoadingView }"
-                  title="Force refresh quotes from Yahoo Finance"
-                  @click="activeViewId && refreshActiveView(true)"
-                >
-                  <UIcon
-                    name="i-lucide-refresh-cw"
-                    class="h-3.5 w-3.5"
-                    :class="{ 'animate-spin text-primary': isManualRefreshing || isLoadingView }"
-                  />
-                </button>
+                <UButton
+                  size="sm"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-settings-2"
+                  title="Configure View"
+                  @click="openEditModal(activeViewDetail.view)"
+                />
               </div>
-              <!-- Layout Switcher (Table vs Cards) -->
-              <div class="flex items-center rounded-xl border border-default/60 p-0.5 bg-muted/30">
-                <button
-                  type="button"
-                  class="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all"
-                  :class="viewDisplayMode === 'table' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-                  title="Institutional Table View"
-                  @click="viewDisplayMode = 'table'"
-                >
-                  <UIcon
-                    name="i-lucide-table-properties"
-                    class="h-3.5 w-3.5"
-                  />
-                  <span>Table</span>
-                </button>
-                <button
-                  type="button"
-                  class="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all"
-                  :class="viewDisplayMode === 'cards' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-                  title="Card Matrix View"
-                  @click="viewDisplayMode = 'cards'"
-                >
-                  <UIcon
-                    name="i-lucide-layout-grid"
-                    class="h-3.5 w-3.5"
-                  />
-                  <span>Cards</span>
-                </button>
-              </div>
-
-              <UButton
-                size="sm"
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-settings-2"
-                title="Configure View"
-                @click="openEditModal(activeViewDetail.view)"
-              />
             </div>
           </div>
         </div>
@@ -867,12 +897,13 @@ onUnmounted(() => {
         <div class="space-y-4">
           <!-- Search & Settings Controls -->
           <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div class="w-full sm:max-w-md">
+            <div class="w-full sm:max-w-xl lg:max-w-2xl flex-1">
               <UInput
                 v-model="searchQuery"
                 icon="i-lucide-search"
                 placeholder="Search by symbol or company name (e.g. RELIANCE, TCS)..."
                 size="sm"
+                class="w-full"
               />
             </div>
 

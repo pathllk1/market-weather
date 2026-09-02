@@ -18,9 +18,9 @@ interface CacheEntry {
   timestamp: number
 }
 
-// In-memory quote cache with 60-second TTL
+// In-memory quote cache with 30-second TTL (half of client's 60s poll interval to prevent cache-collision)
 const quoteCache = new Map<string, CacheEntry>()
-const CACHE_TTL_MS = 60_000
+const CACHE_TTL_MS = 30_000
 
 // Initialize YahooFinance client with notice suppression
 const yf = new YahooFinance({
@@ -38,18 +38,18 @@ export function toYahooTicker(symbol: string): string {
 
 /**
  * Fetches real-time / delayed quotes for a list of NSE equity symbols.
- * Employs a 60-second cache (with 10-second minimum clamp on forced refresh) and handles per-symbol failures gracefully.
+ * Employs a 30-second cache (with 5-second minimum clamp on forced refresh) and handles per-symbol failures gracefully.
  */
 export async function getLiveQuotes(symbols: string[], forceRefresh = false): Promise<Record<string, LiveQuote>> {
   const results: Record<string, LiveQuote> = {}
   const now = Date.now()
   const symbolsToFetch: string[] = []
 
-  // 1. Check cache first (forced refresh requires at least 10s age)
+  // 1. Check cache first (forced refresh requires at least 5s age to prevent rapid spam clicking)
   for (const rawSymbol of symbols) {
     const symbol = rawSymbol.trim().toUpperCase()
     const cached = quoteCache.get(symbol)
-    const effectiveTtl = forceRefresh ? 10_000 : CACHE_TTL_MS
+    const effectiveTtl = forceRefresh ? 5_000 : CACHE_TTL_MS
     if (cached && now - cached.timestamp < effectiveTtl) {
       results[symbol] = cached.quote
     } else {
@@ -93,11 +93,20 @@ export async function getLiveQuotes(symbols: string[], forceRefresh = false): Pr
           }
 
           quoteCache.set(symbol, { quote: liveQuote, timestamp: now })
+          if (ticker !== symbol) {
+            quoteCache.set(ticker, { quote: liveQuote, timestamp: now })
+          }
           results[symbol] = liveQuote
+          if (ticker !== symbol) {
+            results[ticker] = liveQuote
+          }
         }
       } catch (err) {
-        // Silently tolerate individual quote fetch failures (e.g. rate limit, offline)
-        // Calling layer falls back to local SQLite technical_analysis values
+        // If an individual quote fetch fails temporarily, fallback to previously cached quote if available
+        const fallback = quoteCache.get(symbol)
+        if (fallback?.quote) {
+          results[symbol] = fallback.quote
+        }
         console.warn(`[YahooFinance] Failed to fetch quote for ${symbol}:`, (err as Error).message)
       }
     })

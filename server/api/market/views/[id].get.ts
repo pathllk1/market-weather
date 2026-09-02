@@ -8,6 +8,11 @@ export default defineEventHandler(async (event): Promise<MarketViewDetailRespons
   const query = getQuery(event)
   const forceRefresh = query.refresh === 'true' || query.refresh === '1'
 
+  // Never cache live view OHLCV quotes in browser or proxy
+  setHeader(event, 'Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  setHeader(event, 'Pragma', 'no-cache')
+  setHeader(event, 'Expires', '0')
+
   if (!viewId) {
     throw createError({
       statusCode: 400,
