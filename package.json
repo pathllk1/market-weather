@@ -20,6 +20,7 @@
     "@nuxt/ui": "^4.11.0",
     "@nuxtjs/google-fonts": "3.2.0",
     "jose": "^6.2.10",
+    "lightweight-charts": "^5.2.1",
     "nuxt": "^4.5.2",
     "nuxt-charts": "2.2.1",
     "nuxt-icons": "4.0.0",
