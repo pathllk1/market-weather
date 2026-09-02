@@ -291,7 +291,7 @@ async function handleSubmit() {
           <input
             v-model.number="pricePerShare"
             type="number"
-            step="0.05"
+            step="any"
             min="0"
             placeholder="e.g. 1315.20"
             class="w-full rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-xs font-mono font-bold text-neutral-900 dark:text-white focus:outline-hidden focus:border-primary"

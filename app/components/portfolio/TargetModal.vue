@@ -99,7 +99,7 @@ async function handleSubmit() {
             <input
               v-model.number="targetPrice"
               type="number"
-              step="0.05"
+              step="any"
               placeholder="e.g. 1500"
               class="w-full rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-xs font-mono font-bold text-neutral-900 dark:text-white focus:outline-hidden focus:border-emerald-500"
             />
@@ -112,7 +112,7 @@ async function handleSubmit() {
             <input
               v-model.number="stopLoss"
               type="number"
-              step="0.05"
+              step="any"
               placeholder="e.g. 1200"
               class="w-full rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-xs font-mono font-bold text-neutral-900 dark:text-white focus:outline-hidden focus:border-rose-500"
             />
