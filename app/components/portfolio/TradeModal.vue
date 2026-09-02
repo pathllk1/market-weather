@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { TradeType } from '~/types/portfolio'
+import type { TradeType, PortfolioTrade } from '~/types/portfolio'
 
 const props = defineProps<{
   modelValue: boolean
   portfolioId: string
   defaultSymbol?: string
   defaultType?: TradeType
+  tradeToEdit?: PortfolioTrade | null
 }>()
 
 const emit = defineEmits<{
@@ -31,6 +32,27 @@ const errorMessage = ref('')
 const dematAccounts = ref<Array<{ id: string; accountName: string; brokerName: string; depository?: string; isDefault: boolean }>>([])
 const selectedDematId = ref('')
 
+function populateFormFromTrade(t: PortfolioTrade | null | undefined) {
+  if (t) {
+    symbol.value = t.symbol
+    searchQuery.value = t.symbol
+    tradeType.value = t.tradeType
+    tradeDate.value = t.tradeDate
+    quantity.value = t.quantity
+    pricePerShare.value = t.pricePerShare
+    selectedDematId.value = t.dematAccountId || ''
+    notes.value = t.notes || ''
+  } else {
+    symbol.value = props.defaultSymbol || ''
+    searchQuery.value = props.defaultSymbol || ''
+    tradeType.value = props.defaultType || 'BUY'
+    tradeDate.value = new Date().toISOString().split('T')[0]!
+    quantity.value = undefined
+    pricePerShare.value = undefined
+    notes.value = ''
+  }
+}
+
 async function loadDematAccounts() {
   try {
     const res = await $fetch<{ dematAccounts: any[] }>('/api/demat')
@@ -47,12 +69,19 @@ async function loadDematAccounts() {
 watch(() => props.modelValue, (val) => {
   if (val) {
     loadDematAccounts()
+    populateFormFromTrade(props.tradeToEdit)
+  }
+})
+
+watch(() => props.tradeToEdit, (val) => {
+  if (props.modelValue) {
+    populateFormFromTrade(val)
   }
 })
 
 // Symbol search
 const searchQuery = ref(props.defaultSymbol || '')
-const searchResults = ref<Array<{ symbol: string; company_name: string; current_price: number }>>([])
+const searchResults = ref<Array<{ symbol: string; companyName?: string; company_name?: string; price?: number; current_price?: number }>>([])
 const isSearching = ref(false)
 
 watch(() => props.defaultSymbol, (val) => {
@@ -90,11 +119,13 @@ function handleSearchInput(e: Event) {
   }, 250)
 }
 
-function selectSymbol(item: { symbol: string; company_name: string; current_price: number }) {
+function selectSymbol(item: { symbol: string; companyName?: string; company_name?: string; price?: number; current_price?: number }) {
   symbol.value = item.symbol
-  searchQuery.value = `${item.symbol} - ${item.company_name}`
-  if (!pricePerShare.value || pricePerShare.value <= 0) {
-    pricePerShare.value = item.current_price
+  const name = item.companyName || item.company_name || ''
+  searchQuery.value = name ? `${item.symbol} - ${name}` : item.symbol
+  const p = item.price ?? item.current_price
+  if (p && (!pricePerShare.value || pricePerShare.value <= 0)) {
+    pricePerShare.value = p
   }
   searchResults.value = []
 }
@@ -142,8 +173,13 @@ async function handleSubmit() {
   errorMessage.value = ''
 
   try {
-    await $fetch(`/api/portfolio/${props.portfolioId}/trades`, {
-      method: 'POST',
+    const endpoint = props.tradeToEdit
+      ? `/api/portfolio/${props.portfolioId}/trades/${props.tradeToEdit.id}`
+      : `/api/portfolio/${props.portfolioId}/trades`
+    const method = props.tradeToEdit ? 'PUT' : 'POST'
+
+    await $fetch(endpoint, {
+      method,
       body: {
         symbol: symbol.value,
         tradeType: tradeType.value,
@@ -178,8 +214,8 @@ async function handleSubmit() {
 <template>
   <UModal
     v-model:open="isOpen"
-    title="Record Portfolio Trade"
-    description="Log equity buy, sell, or corporate actions"
+    :title="tradeToEdit ? 'Edit Trade & Reassign Demat' : 'Record Portfolio Trade'"
+    :description="tradeToEdit ? 'Change executing Demat account (e.g. Angel One to Zerodha), quantity, or price' : 'Log equity buy, sell, or corporate actions'"
     :ui="{ content: 'sm:max-w-lg' }"
   >
     <template #body>
@@ -252,9 +288,9 @@ async function handleSubmit() {
             >
               <div>
                 <strong class="font-bold text-neutral-900 dark:text-white">{{ item.symbol }}</strong>
-                <span class="text-neutral-500 text-[11px] block">{{ item.company_name }}</span>
+                <span class="text-neutral-500 text-[11px] block">{{ item.companyName || item.company_name }}</span>
               </div>
-              <span class="font-mono font-bold text-neutral-900 dark:text-white">₹{{ item.current_price?.toFixed(2) }}</span>
+              <span class="font-mono font-bold text-neutral-900 dark:text-white">₹{{ (item.price ?? item.current_price)?.toFixed(2) }}</span>
             </button>
           </div>
         </div>
@@ -351,7 +387,7 @@ async function handleSubmit() {
             :class="tradeType === 'BUY' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'"
           >
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="h-3.5 w-3.5 animate-spin" />
-            <span>Confirm {{ tradeType }} Order</span>
+            <span>{{ tradeToEdit ? 'Save Trade Changes' : `Confirm ${tradeType} Order` }}</span>
           </button>
         </div>
       </form>

@@ -33,7 +33,10 @@ const trades = ref<PortfolioTrade[]>([])
 const taxSummary = ref<TaxSummary | null>(null)
 const rebalancePlan = ref<RebalanceItem[]>([])
 
-// State: Tabs
+// Master Mode Switcher: Tab 1 (Enterprise Analytics) vs Tab 2 (Operations)
+const masterMode = ref<'analytics' | 'operations'>('analytics')
+
+// State: Operational Sub-Tabs
 type PortfolioTab = 'holdings' | 'risk' | 'allocation' | 'trades' | 'rebalance' | 'tax'
 const activeTab = ref<PortfolioTab>('holdings')
 
@@ -50,6 +53,7 @@ const tabs = [
 const isTradeModalOpen = ref(false)
 const tradeModalSymbol = ref('')
 const tradeModalType = ref<TradeType>('BUY')
+const tradeToEdit = ref<PortfolioTrade | null>(null)
 
 const isTargetModalOpen = ref(false)
 const targetModalHolding = ref<HoldingPosition | null>(null)
@@ -156,7 +160,7 @@ async function loadActivePortfolioData() {
     const dematParam = selectedDematFilter.value ? `?dematId=${selectedDematFilter.value}` : ''
     const [sumRes, tradesRes, taxRes, rebRes] = await Promise.all([
       $fetch<PortfolioSummaryResponse>(`/api/portfolio/${activePortfolioId.value}/summary${dematParam}`),
-      $fetch<{ trades: PortfolioTrade[] }>(`/api/portfolio/${activePortfolioId.value}/trades`),
+      $fetch<{ trades: PortfolioTrade[] }>(`/api/portfolio/${activePortfolioId.value}/trades${dematParam}`),
       $fetch<TaxSummary>(`/api/portfolio/${activePortfolioId.value}/tax`),
       $fetch<{ plan: RebalanceItem[] }>(`/api/portfolio/${activePortfolioId.value}/rebalance`)
     ])
@@ -182,8 +186,16 @@ watch(selectedDematFilter, () => {
 
 // Modal Open Handlers
 function openAddTrade(sym = '', type: TradeType = 'BUY') {
+  tradeToEdit.value = null
   tradeModalSymbol.value = sym
   tradeModalType.value = type
+  isTradeModalOpen.value = true
+}
+
+function openEditTrade(trade: PortfolioTrade) {
+  tradeToEdit.value = trade
+  tradeModalSymbol.value = trade.symbol
+  tradeModalType.value = trade.tradeType
   isTradeModalOpen.value = true
 }
 
@@ -240,14 +252,27 @@ function fmtLakhCr(val: number) {
   return fmtCur(val)
 }
 
-await fetchPortfolios()
+onMounted(() => {
+  fetchPortfolios()
+})
 </script>
 
 <template>
   <div class="space-y-6">
-    <!-- EMPTY STATE WHEN USER HAS NO PORTFOLIOS -->
+    <!-- 1. LOADING SKELETON (Prevents hydration mismatch between SSR & client initial render) -->
     <div
-      v-if="!isLoadingPortfolios && portfolios.length === 0"
+      v-if="isLoadingPortfolios"
+      class="rounded-3xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-12 text-center space-y-4 max-w-xl mx-auto shadow-xs my-16"
+    >
+      <div class="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
+        <UIcon name="i-lucide-loader-2" class="h-6 w-6 animate-spin" />
+      </div>
+      <p class="text-xs text-neutral-400 font-medium">Loading portfolio intelligence...</p>
+    </div>
+
+    <!-- 2. EMPTY STATE WHEN USER HAS NO PORTFOLIOS -->
+    <div
+      v-else-if="portfolios.length === 0"
       class="rounded-3xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-12 text-center space-y-5 max-w-xl mx-auto shadow-xs my-16"
     >
       <div class="h-16 w-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
@@ -365,8 +390,56 @@ await fetchPortfolios()
       </div>
     </div>
 
-    <!-- EXECUTIVE METRICS BANNER (5 Stat Cards) -->
-    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+    <!-- MASTER TWO-TIER TAB SWITCHER -->
+    <div class="flex items-center gap-2 p-1.5 rounded-2xl bg-neutral-100 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700/80 max-w-fit">
+      <button
+        type="button"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+        :class="masterMode === 'analytics'
+          ? 'bg-white dark:bg-neutral-900 text-primary shadow-xs'
+          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'"
+        @click="masterMode = 'analytics'"
+      >
+        <UIcon name="i-lucide-line-chart" class="h-4 w-4" />
+        <span>Enterprise Analytics Dashboard</span>
+        <UBadge color="primary" variant="subtle" size="xs">Canvas 60fps</UBadge>
+      </button>
+
+      <button
+        type="button"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+        :class="masterMode === 'operations'
+          ? 'bg-white dark:bg-neutral-900 text-primary shadow-xs'
+          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'"
+        @click="masterMode = 'operations'"
+      >
+        <UIcon name="i-lucide-layers" class="h-4 w-4" />
+        <span>Holdings & Operations</span>
+        <UBadge color="neutral" variant="subtle" size="xs">{{ summary?.holdings.length || 0 }}</UBadge>
+      </button>
+    </div>
+
+    <!-- TAB 1: ENTERPRISE ANALYTICS DASHBOARD (CANVAS CHARTS) -->
+    <div v-show="masterMode === 'analytics'">
+      <ClientOnly>
+        <PortfolioDashboardTab
+          :summary="summary"
+          :active-portfolio="activePortfolio"
+          @open-trade="openAddTrade"
+          @open-stock="openStockChart"
+        />
+        <template #fallback>
+          <div class="h-96 flex items-center justify-center text-neutral-400">
+            <UIcon name="i-lucide-loader-2" class="h-8 w-8 animate-spin text-primary" />
+          </div>
+        </template>
+      </ClientOnly>
+    </div>
+
+    <!-- TAB 2: HOLDINGS & OPERATIONS MANAGEMENT -->
+    <div v-show="masterMode === 'operations'" class="space-y-6">
+      <!-- EXECUTIVE METRICS BANNER (5 Stat Cards) -->
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
       <!-- 1. Portfolio Value -->
       <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 shadow-xs">
         <span class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">
@@ -743,47 +816,28 @@ await fetchPortfolios()
         </div>
       </div>
 
-      <!-- Historical Portfolio vs Benchmark Performance Curve -->
-      <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5 space-y-3">
-        <div class="flex items-center justify-between">
-          <div>
-            <h3 class="font-bold text-sm text-neutral-900 dark:text-white">Portfolio Value vs NIFTY 50 Benchmark (30-Day Growth)</h3>
-            <p class="text-xs text-neutral-500">Continuous mark-to-market performance curve tracking capital trajectory</p>
+      <!-- Enterprise Analytics Banner (Canvas Charts) -->
+      <div class="rounded-2xl border border-primary/20 bg-primary/5 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <UIcon name="i-lucide-line-chart" class="h-5 w-5 text-primary" />
+            <h3 class="font-bold text-sm text-neutral-900 dark:text-white">
+              Interactive Canvas Performance Engine
+            </h3>
+            <UBadge color="primary" variant="subtle" size="xs">Canvas 60fps</UBadge>
           </div>
-          <div class="flex items-center gap-3 text-xs font-mono">
-            <span class="flex items-center gap-1 text-emerald-500 font-bold">
-              <span class="h-2 w-2 rounded-full bg-emerald-500" />
-              <span>Portfolio (₹)</span>
-            </span>
-            <span class="flex items-center gap-1 text-neutral-400 font-bold">
-              <span class="h-2 w-2 rounded-full bg-neutral-400" />
-              <span>Benchmark Trend</span>
-            </span>
-          </div>
+          <p class="text-xs text-neutral-500 max-w-xl">
+            Interactive multi-timeframe equity curves, benchmark correlation overlays (NIFTY 50), and drawdown underwater analysis are available in the Enterprise Dashboard.
+          </p>
         </div>
-
-        <!-- SVG Timeline Curve -->
-        <div class="w-full h-48 relative border border-neutral-100 dark:border-neutral-800/80 rounded-xl bg-neutral-50/50 dark:bg-neutral-950 p-2 overflow-hidden">
-          <svg class="w-full h-full" viewBox="0 0 800 180" preserveAspectRatio="none">
-            <!-- Grid lines -->
-            <line x1="0" y1="45" x2="800" y2="45" stroke="currentColor" stroke-dasharray="3,3" class="text-neutral-200 dark:text-neutral-800" />
-            <line x1="0" y1="90" x2="800" y2="90" stroke="currentColor" stroke-dasharray="3,3" class="text-neutral-200 dark:text-neutral-800" />
-            <line x1="0" y1="135" x2="800" y2="135" stroke="currentColor" stroke-dasharray="3,3" class="text-neutral-200 dark:text-neutral-800" />
-
-            <!-- Portfolio Trend Path -->
-            <path
-              v-if="summary?.historicalValueCurve && summary.historicalValueCurve.length > 1"
-              :d="summary.historicalValueCurve.map((pt, idx) => {
-                const x = (idx / (summary!.historicalValueCurve.length - 1)) * 800
-                const y = 90 - ((pt.portfolioValue - summary!.portfolio.totalInvested) / (summary!.portfolio.totalInvested || 1)) * 140
-                return `${idx === 0 ? 'M' : 'L'} ${x} ${Math.max(10, Math.min(170, y))}`
-              }).join(' ')"
-              fill="none"
-              stroke="#10b981"
-              stroke-width="2.5"
-            />
-          </svg>
-        </div>
+        <button
+          type="button"
+          class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-xs hover:bg-primary-dark transition-all cursor-pointer whitespace-nowrap self-start sm:self-center"
+          @click="masterMode = 'analytics'"
+        >
+          <span>Open Canvas Charts</span>
+          <UIcon name="i-lucide-arrow-right" class="h-4 w-4" />
+        </button>
       </div>
     </div>
 
@@ -898,7 +952,7 @@ await fetchPortfolios()
               <th class="p-3.5 text-right">Charges (STT/GST)</th>
               <th class="p-3.5 text-right">Total Outflow</th>
               <th class="p-3.5">Notes</th>
-              <th class="p-3.5 text-center">Delete</th>
+              <th class="p-3.5 text-center">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-neutral-200 dark:divide-neutral-800 font-medium">
@@ -916,7 +970,7 @@ await fetchPortfolios()
               <td class="p-3.5 font-bold text-neutral-900 dark:text-white">{{ t.symbol }}</td>
               <td class="p-3.5">
                 <UBadge color="neutral" variant="subtle" size="xs">
-                  {{ summary?.dematAccounts?.find(d => d.id === t.dematAccountId)?.brokerName || 'Primary' }}
+                  {{ t.brokerName || summary?.dematAccounts?.find(d => d.id === t.dematAccountId)?.brokerName || 'Unassigned' }}
                 </UBadge>
               </td>
               <td class="p-3.5 text-right font-bold">{{ t.quantity }}</td>
@@ -925,14 +979,24 @@ await fetchPortfolios()
               <td class="p-3.5 text-right font-bold text-neutral-900 dark:text-white">{{ fmtCur(t.totalCost) }}</td>
               <td class="p-3.5 text-neutral-500 text-[11px] font-sans truncate max-w-xs">{{ t.notes || '—' }}</td>
               <td class="p-3.5 text-center">
-                <button
-                  type="button"
-                  class="p-1 rounded-lg text-neutral-400 hover:text-rose-500 transition-colors cursor-pointer"
-                  title="Delete trade"
-                  @click="handleDeleteTrade(t.id)"
-                >
-                  <UIcon name="i-lucide-trash-2" class="h-4 w-4" />
-                </button>
+                <div class="flex items-center justify-center gap-1.5">
+                  <button
+                    type="button"
+                    class="p-1.5 rounded-lg text-neutral-400 hover:text-primary hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                    title="Edit Trade & Reassign Demat Account"
+                    @click="openEditTrade(t)"
+                  >
+                    <UIcon name="i-lucide-pencil" class="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    class="p-1.5 rounded-lg text-neutral-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                    title="Delete trade"
+                    @click="handleDeleteTrade(t.id)"
+                  >
+                    <UIcon name="i-lucide-trash-2" class="h-4 w-4" />
+                  </button>
+                </div>
               </td>
             </tr>
             <tr v-if="trades.length === 0">
@@ -1072,6 +1136,7 @@ await fetchPortfolios()
       </div>
     </div>
   </div>
+</div>
 
     <!-- EMBEDDED MODALS -->
     <PortfolioTradeModal
@@ -1079,6 +1144,7 @@ await fetchPortfolios()
       :portfolio-id="activePortfolioId"
       :default-symbol="tradeModalSymbol"
       :default-type="tradeModalType"
+      :trade-to-edit="tradeToEdit"
       @saved="loadActivePortfolioData"
     />
 
