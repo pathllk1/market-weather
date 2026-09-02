@@ -219,6 +219,11 @@ function openStockChart(sym: string) {
   isStockDetailModalOpen.value = true
 }
 
+function handleStockModalTrade(sym: string, type: TradeType = 'BUY') {
+  isStockDetailModalOpen.value = false
+  openAddTrade(sym, type)
+}
+
 async function handleDeleteTrade(tradeId: string) {
   if (!confirm('Are you sure you want to remove this trade record?')) return
   try {
@@ -252,8 +257,14 @@ function fmtLakhCr(val: number) {
   return fmtCur(val)
 }
 
-onMounted(() => {
-  fetchPortfolios()
+onMounted(async () => {
+  await fetchPortfolios()
+  const route = useRoute()
+  if (route.query.action === 'trade' && typeof route.query.symbol === 'string') {
+    const sym = route.query.symbol
+    const type = (route.query.type as TradeType) || 'BUY'
+    openAddTrade(sym, type)
+  }
 })
 </script>
 
@@ -1174,6 +1185,7 @@ onMounted(() => {
     <MarketStockDetailModal
       v-model="isStockDetailModalOpen"
       :symbol="selectedStockSymbol"
+      @trade="handleStockModalTrade"
     />
   </div>
 </template>

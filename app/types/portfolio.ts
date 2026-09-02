@@ -211,5 +211,5 @@ export interface PortfolioSummaryResponse {
   marketCapAllocation: AllocationSlice[]
   topGainers: HoldingPosition[]
   topLosers: HoldingPosition[]
-  historicalValueCurve: Array<{ date: string; portfolioValue: number; benchmarkValue: number }>
+  historicalValueCurve: Array<{ date: string; portfolioValue: number; investedValue: number; benchmarkValue: number }>
 }

@@ -206,6 +206,7 @@ onMounted(() => {
     <MarketStockDetailModal
       v-model="isModalOpen"
       :symbol="selectedSymbol"
+      @trade="(sym, type) => { isModalOpen = false; navigateTo(`/portfolio?action=trade&symbol=${encodeURIComponent(sym)}&type=${type}`) }"
     />
   </UCard>
 </template>

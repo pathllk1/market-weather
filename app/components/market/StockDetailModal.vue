@@ -9,6 +9,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:modelValue', val: boolean): void
+  (e: 'trade', symbol: string, type: 'BUY' | 'SELL'): void
 }>()
 
 const isOpen = ref(props.modelValue)
@@ -61,6 +62,11 @@ function getScoreColor(score: number) {
   if (score >= 35) return 'warning'
   return 'error'
 }
+
+function handleTradeClick(type: 'BUY' | 'SELL' = 'BUY') {
+  if (!stockData.value) return
+  emit('trade', stockData.value.symbol, type)
+}
 </script>
 
 <template>
@@ -106,6 +112,28 @@ function getScoreColor(score: number) {
               {{ stockData.percentageChange >= 0 ? '+' : '' }}{{ stockData.priceChange?.toFixed(2) }}
               ({{ stockData.percentageChange >= 0 ? '+' : '' }}{{ stockData.percentageChange?.toFixed(2) }}%)
             </div>
+          </div>
+
+          <!-- Trade Action Buttons -->
+          <div class="flex items-center gap-1.5 border-l border-neutral-200 dark:border-neutral-800 pl-3">
+            <button
+              type="button"
+              class="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition-all cursor-pointer whitespace-nowrap active:scale-95"
+              title="Record BUY trade for this stock"
+              @click="handleTradeClick('BUY')"
+            >
+              <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" />
+              <span>BUY</span>
+            </button>
+            <button
+              type="button"
+              class="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-xs transition-all cursor-pointer whitespace-nowrap active:scale-95"
+              title="Record SELL trade for this stock"
+              @click="handleTradeClick('SELL')"
+            >
+              <UIcon name="i-lucide-minus" class="h-3.5 w-3.5" />
+              <span>SELL</span>
+            </button>
           </div>
         </div>
       </div>

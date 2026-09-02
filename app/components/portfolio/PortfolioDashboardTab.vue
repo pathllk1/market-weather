@@ -32,17 +32,13 @@ const drawdownChartContainer = ref<HTMLDivElement | null>(null)
 let mainChart: IChartApi | null = null
 let portfolioAreaSeries: ISeriesApi<'Area'> | null = null
 let benchmarkLineSeries: ISeriesApi<'Line'> | null = null
+let investedLineSeries: ISeriesApi<'Line'> | null = null
 
 let drawdownChart: IChartApi | null = null
 let drawdownAreaSeries: ISeriesApi<'Area'> | null = null
 
-// Crosshair Tooltip state
-const crosshairData = ref<{
-  date: string
-  portfolioValue: number
-  invested: number
-  benchmarkValue?: number
-} | null>(null)
+// Interactive Display Mode: '% Alpha vs Benchmark' | '₹ Net Worth' | 'Dual Axis'
+const chartDisplayMode = ref<'percent' | 'rupee' | 'dual'>('percent')
 
 // Active timeframe
 const activeTimeframe = ref<'1M' | '3M' | '6M' | '1Y' | 'ALL'>('ALL')
@@ -58,12 +54,13 @@ function getThemeColors() {
     gridColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.05)',
     borderColor: isDark ? '#262626' : '#e5e5e5',
     crosshairColor: isDark ? '#525252' : '#a3a3a3',
-    portfolioTopColor: 'rgba(16, 185, 129, 0.4)',
-    portfolioBottomColor: 'rgba(16, 185, 129, 0.02)',
+    portfolioTopColor: 'rgba(16, 185, 129, 0.35)',
+    portfolioBottomColor: 'rgba(16, 185, 129, 0.01)',
     portfolioLineColor: '#10b981',
+    investedLineColor: isDark ? '#94a3b8' : '#64748b',
     benchmarkLineColor: '#6366f1',
     drawdownTopColor: 'rgba(244, 63, 94, 0.02)',
-    drawdownBottomColor: 'rgba(244, 63, 94, 0.4)',
+    drawdownBottomColor: 'rgba(244, 63, 94, 0.35)',
     drawdownLineColor: '#f43f5e'
   }
 }
@@ -74,15 +71,13 @@ const chartPoints = computed(() => {
     return []
   }
 
-  const invested = props.summary.portfolio.totalInvested || 0
   const raw = props.summary.historicalValueCurve.map(pt => ({
     time: pt.date,
     value: Number(pt.portfolioValue.toFixed(2)),
-    invested: Number(invested.toFixed(2)),
+    invested: Number((pt.investedValue || props.summary?.portfolio.totalInvested || 0).toFixed(2)),
     benchmark: pt.benchmarkValue ? Number(pt.benchmarkValue.toFixed(2)) : undefined
   }))
 
-  // Filter based on active timeframe
   if (activeTimeframe.value === 'ALL' || raw.length <= 1) return raw
 
   const now = new Date()
@@ -97,18 +92,83 @@ const chartPoints = computed(() => {
   return filtered.length > 0 ? filtered : raw
 })
 
-// Historical Drawdown Points
+// High-Watermark Peak Value
+const highWatermark = computed(() => {
+  const pts = chartPoints.value
+  if (pts.length === 0) return props.summary?.portfolio.totalValue || 0
+  return Math.max(...pts.map(p => p.value))
+})
+
+// Current Drawdown from Peak
+const currentDrawdown = computed(() => {
+  const cur = props.summary?.portfolio.totalValue || 0
+  const peak = highWatermark.value
+  if (peak <= 0) return 0
+  return Math.min(0, ((cur - peak) / peak) * 100)
+})
+
+// Crosshair Live Hover state
+const hoveredPoint = ref<{
+  date: string
+  portfolioValue: number
+  invested: number
+  benchmarkValue?: number
+} | null>(null)
+
+// Active HUD readout (defaults to current live values if not hovering)
+const activeHud = computed(() => {
+  const pts = chartPoints.value
+  const latest = pts[pts.length - 1]
+  const first = pts[0]
+
+  const pVal = hoveredPoint.value ? hoveredPoint.value.portfolioValue : (latest?.value ?? props.summary?.portfolio.totalValue ?? 0)
+  const inv = hoveredPoint.value ? hoveredPoint.value.invested : (latest?.invested ?? props.summary?.portfolio.totalInvested ?? 0)
+  const dt = hoveredPoint.value ? hoveredPoint.value.date : (latest?.time ?? 'Live Marks')
+  const bVal = hoveredPoint.value?.benchmarkValue ?? latest?.benchmark
+
+  const netGain = pVal - inv
+  const returnPct = inv > 0 ? (netGain / inv) * 100 : 0
+
+  // Time-Weighted normalized return vs start of selected timeframe
+  const firstRet = (first && first.invested > 0) ? ((first.value - first.invested) / first.invested) * 100 : 0
+  const portReturnFromStart = activeTimeframe.value === 'ALL' ? returnPct : (returnPct - firstRet)
+  
+  const startBench = first?.benchmark || 1
+  const benchReturnFromStart = bVal ? ((bVal - startBench) / startBench) * 100 : 0
+  const rawAlpha = portReturnFromStart - benchReturnFromStart
+  const alpha = Math.abs(rawAlpha) < 0.005 ? 0 : rawAlpha
+
+  return {
+    date: dt,
+    portfolioValue: pVal,
+    invested: inv,
+    netGain,
+    returnPct,
+    benchmarkValue: bVal,
+    benchmarkReturn: benchReturnFromStart,
+    alpha
+  }
+})
+
+// Historical Drawdown Points (Calculated on Return Trajectory from Running Peak)
 const drawdownPoints = computed(() => {
   const pts = chartPoints.value
   if (pts.length === 0) return []
 
-  let peak = pts[0]?.value || 0
-  return pts.map(pt => {
-    if (pt.value > peak) peak = pt.value
-    const dd = peak > 0 ? ((pt.value - peak) / peak) * 100 : 0
+  const returns = pts.map(p => {
+    const ret = p.invested > 0 ? ((p.value - p.invested) / p.invested) * 100 : 0
+    return { time: p.time, ret }
+  })
+
+  let runningPeak = returns[0]?.ret || 0
+  return returns.map(r => {
+    if (r.ret > runningPeak) {
+      runningPeak = r.ret
+    }
+    const dd = runningPeak > 0 ? ((r.ret - runningPeak) / (runningPeak + 100)) * 100 : Math.min(0, r.ret - runningPeak)
     return {
-      time: pt.time,
-      value: Number(dd.toFixed(2))
+      time: r.time,
+      value: Number(Math.min(0, dd).toFixed(2))
     }
   })
 })
@@ -143,7 +203,7 @@ function initCharts() {
 
   mainChart = createChart(mainChartContainer.value, {
     width: mainChartContainer.value.clientWidth,
-    height: 340,
+    height: 380,
     layout: {
       background: { type: ColorType.Solid, color: theme.background },
       textColor: theme.textColor,
@@ -159,24 +219,30 @@ function initCharts() {
         color: theme.crosshairColor,
         width: 1,
         style: LineStyle.Dashed,
-        labelBackgroundColor: theme.background
+        labelBackgroundColor: theme.isDark ? '#262626' : '#f1f5f9'
       },
       horzLine: {
         color: theme.crosshairColor,
         width: 1,
         style: LineStyle.Dashed,
-        labelBackgroundColor: theme.background
+        labelBackgroundColor: theme.isDark ? '#262626' : '#f1f5f9'
       }
     },
     rightPriceScale: {
       borderColor: theme.borderColor,
-      scaleMargins: { top: 0.1, bottom: 0.15 },
+      scaleMargins: { top: 0.12, bottom: 0.12 },
       autoScale: true
+    },
+    leftPriceScale: {
+      borderColor: theme.borderColor,
+      scaleMargins: { top: 0.12, bottom: 0.12 },
+      autoScale: true,
+      visible: false
     },
     timeScale: {
       borderColor: theme.borderColor,
       rightOffset: 6,
-      barSpacing: 12,
+      barSpacing: 14,
       minBarSpacing: 4,
       fixLeftEdge: true
     },
@@ -184,12 +250,23 @@ function initCharts() {
     handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true }
   })
 
-  // Portfolio Area Series (v5 addSeries API)
+  // Portfolio Area Series
   portfolioAreaSeries = mainChart.addSeries(AreaSeries, {
     topColor: theme.portfolioTopColor,
     bottomColor: theme.portfolioBottomColor,
     lineColor: theme.portfolioLineColor,
-    lineWidth: 2,
+    lineWidth: 2.5 as any,
+    priceFormat: {
+      type: 'custom',
+      formatter: (p: number) => (p >= 0 ? '+' : '') + p.toFixed(2) + '%'
+    }
+  })
+
+  // Invested Capital Baseline Series
+  investedLineSeries = mainChart.addSeries(LineSeries, {
+    color: theme.investedLineColor,
+    lineWidth: 1,
+    lineStyle: LineStyle.Dashed,
     priceFormat: {
       type: 'custom',
       formatter: (p: number) => '₹' + p.toLocaleString('en-IN', { maximumFractionDigits: 0 })
@@ -199,37 +276,36 @@ function initCharts() {
   // Benchmark Overlay Line Series
   benchmarkLineSeries = mainChart.addSeries(LineSeries, {
     color: theme.benchmarkLineColor,
-    lineWidth: 1,
-    lineStyle: LineStyle.Dotted,
+    lineWidth: 2,
+    lineStyle: LineStyle.Solid,
+    priceLineVisible: false,
+    lastValueVisible: true,
     priceFormat: {
       type: 'custom',
-      formatter: (p: number) => '₹' + p.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+      formatter: (p: number) => (p >= 0 ? '+' : '') + p.toFixed(2) + '%'
     }
   })
 
-  // Set Data
+  // Set Data based on current mode
   updateMainChartData()
 
   // Crosshair Handler
   mainChart.subscribeCrosshairMove((param) => {
     if (!param.time || !param.seriesData) {
-      crosshairData.value = null
+      hoveredPoint.value = null
       return
     }
 
-    const portData = portfolioAreaSeries ? (param.seriesData.get(portfolioAreaSeries) as any) : null
-    const benchData = benchmarkLineSeries ? (param.seriesData.get(benchmarkLineSeries) as any) : null
-
-    if (portData) {
-      const match = chartPoints.value.find(p => p.time === param.time)
-      crosshairData.value = {
+    const match = chartPoints.value.find(p => p.time === param.time)
+    if (match) {
+      hoveredPoint.value = {
         date: String(param.time),
-        portfolioValue: portData.value,
-        invested: match?.invested || 0,
-        benchmarkValue: benchData?.value
+        portfolioValue: match.value,
+        invested: match.invested,
+        benchmarkValue: match.benchmark
       }
     } else {
-      crosshairData.value = null
+      hoveredPoint.value = null
     }
   })
 
@@ -265,7 +341,7 @@ function initCharts() {
       timeScale: {
         borderColor: theme.borderColor,
         rightOffset: 6,
-        barSpacing: 12,
+        barSpacing: 14,
         minBarSpacing: 4,
         fixLeftEdge: true
       }
@@ -276,6 +352,8 @@ function initCharts() {
       bottomColor: theme.drawdownBottomColor,
       lineColor: theme.drawdownLineColor,
       lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
       priceFormat: {
         type: 'custom',
         formatter: (p: number) => p.toFixed(2) + '%'
@@ -287,22 +365,139 @@ function initCharts() {
 }
 
 function updateMainChartData() {
-  if (!portfolioAreaSeries || !benchmarkLineSeries) return
+  if (!mainChart || !portfolioAreaSeries || !benchmarkLineSeries || !investedLineSeries) return
 
   const data = chartPoints.value
   if (data.length === 0) return
 
-  portfolioAreaSeries.setData(data.map(d => ({ time: d.time as any, value: d.value })))
+  const mode = chartDisplayMode.value
+  const startPort = data[0]?.value || 1
+  const startBench = data[0]?.benchmark || 1
 
-  const benchData = data
-    .filter(d => d.benchmark !== undefined)
-    .map(d => ({ time: d.time as any, value: d.benchmark! }))
+  if (mode === 'percent') {
+    // 1. RELATIVE % ALPHA COMPARISON (Institutional Standard)
+    mainChart.priceScale('left').applyOptions({ visible: false })
+    mainChart.priceScale('right').applyOptions({
+      visible: true,
+      autoScale: true,
+      scaleMargins: { top: 0.15, bottom: 0.15 }
+    })
 
-  if (benchData.length > 0) {
+    portfolioAreaSeries.applyOptions({
+      priceScaleId: 'right',
+      priceFormat: {
+        type: 'custom',
+        formatter: (p: number) => (p >= 0 ? '+' : '') + p.toFixed(2) + '%'
+      }
+    })
+    benchmarkLineSeries.applyOptions({
+      visible: true,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      priceScaleId: 'right',
+      priceFormat: {
+        type: 'custom',
+        formatter: (p: number) => (p >= 0 ? '+' : '') + p.toFixed(2) + '%'
+      }
+    })
+    investedLineSeries.applyOptions({ visible: false })
+
+    const firstRet = (data[0] && data[0].invested > 0)
+      ? ((data[0].value - data[0].invested) / data[0].invested) * 100
+      : 0
+
+    // Set normalized performance (% return on invested capital)
+    portfolioAreaSeries.setData(data.map(d => {
+      const curRet = d.invested > 0 ? ((d.value - d.invested) / d.invested) * 100 : 0
+      const normVal = activeTimeframe.value === 'ALL' ? curRet : (curRet - firstRet)
+      return {
+        time: d.time as any,
+        value: Number(normVal.toFixed(2))
+      }
+    }))
+
+    benchmarkLineSeries.setData(data.map(d => ({
+      time: d.time as any,
+      value: d.benchmark !== undefined
+        ? Number((((d.benchmark - startBench) / startBench) * 100).toFixed(2))
+        : 0
+    })))
+  } else if (mode === 'rupee') {
+    // 2. NET WORTH (₹) VS INVESTED CAPITAL BASELINE
+    mainChart.priceScale('left').applyOptions({ visible: false })
+    mainChart.priceScale('right').applyOptions({
+      visible: true,
+      autoScale: true,
+      scaleMargins: { top: 0.12, bottom: 0.12 }
+    })
+
+    portfolioAreaSeries.applyOptions({
+      priceScaleId: 'right',
+      priceFormat: {
+        type: 'custom',
+        formatter: (p: number) => '₹' + p.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+      }
+    })
+    investedLineSeries.applyOptions({
+      visible: true,
+      priceScaleId: 'right',
+      priceFormat: {
+        type: 'custom',
+        formatter: (p: number) => '₹' + p.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+      }
+    })
+    benchmarkLineSeries.applyOptions({ visible: false })
+
+    portfolioAreaSeries.setData(data.map(d => ({ time: d.time as any, value: d.value })))
+    investedLineSeries.setData(data.map(d => ({ time: d.time as any, value: d.invested })))
+  } else if (mode === 'dual') {
+    // 3. DUAL AXIS: Portfolio (₹ on Right) & Nifty Index (Points on Left)
+    mainChart.priceScale('left').applyOptions({
+      visible: true,
+      autoScale: true,
+      scaleMargins: { top: 0.12, bottom: 0.12 }
+    })
+    mainChart.priceScale('right').applyOptions({
+      visible: true,
+      autoScale: true,
+      scaleMargins: { top: 0.12, bottom: 0.12 }
+    })
+
+    portfolioAreaSeries.applyOptions({
+      priceScaleId: 'right',
+      priceFormat: {
+        type: 'custom',
+        formatter: (p: number) => '₹' + p.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+      }
+    })
+    investedLineSeries.applyOptions({
+      visible: true,
+      priceScaleId: 'right',
+      priceFormat: {
+        type: 'custom',
+        formatter: (p: number) => '₹' + p.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+      }
+    })
+    benchmarkLineSeries.applyOptions({
+      visible: true,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      priceScaleId: 'left',
+      priceFormat: {
+        type: 'custom',
+        formatter: (p: number) => p.toLocaleString('en-IN', { maximumFractionDigits: 0 }) + ' pts'
+      }
+    })
+
+    portfolioAreaSeries.setData(data.map(d => ({ time: d.time as any, value: d.value })))
+    investedLineSeries.setData(data.map(d => ({ time: d.time as any, value: d.invested })))
+    const benchData = data
+      .filter(d => d.benchmark !== undefined)
+      .map(d => ({ time: d.time as any, value: d.benchmark! }))
     benchmarkLineSeries.setData(benchData)
   }
 
-  mainChart?.timeScale().fitContent()
+  mainChart.timeScale().fitContent()
 }
 
 function updateDrawdownChartData() {
@@ -334,7 +529,7 @@ function setupResizeObserver() {
 
 // Watchers
 watch(
-  () => [props.summary, activeTimeframe.value],
+  () => [props.summary, activeTimeframe.value, chartDisplayMode.value],
   () => {
     nextTick(() => {
       updateMainChartData()
@@ -463,65 +658,149 @@ function fmtCur(val: number) {
       </div>
     </div>
 
-    <!-- 2. MAIN TRADINGVIEW CANVAS CHART: PORTFOLIO NET WORTH VS BENCHMARK -->
-    <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5 space-y-4 shadow-xs">
+    <!-- 2. MAIN TRADINGVIEW CANVAS CHART: INSTITUTIONAL PERFORMANCE ENGINE -->
+    <div class="rounded-3xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-6 space-y-5 shadow-xs">
       <!-- Chart Controls Header -->
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-100 dark:border-neutral-800/80 pb-3">
-        <div class="space-y-0.5">
-          <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-line-chart" class="h-5 w-5 text-emerald-500" />
-            <h3 class="font-bold text-base text-neutral-900 dark:text-white">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-100 dark:border-neutral-800/80 pb-4">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <UIcon name="i-lucide-trending-up" class="h-5 w-5 text-emerald-500" />
+            <h3 class="font-black text-base sm:text-lg text-neutral-900 dark:text-white tracking-tight">
               Institutional Performance Trajectory
             </h3>
-            <UBadge color="neutral" variant="subtle" size="xs">Canvas 60fps</UBadge>
+            <UBadge color="success" variant="subtle" size="xs">TradingView 60fps</UBadge>
+            <UBadge color="neutral" variant="subtle" size="xs">
+              {{ chartDisplayMode === 'percent' ? 'Normalized Relative Alpha (%)' : chartDisplayMode === 'rupee' ? 'Mark-To-Market (₹)' : 'Dual Axis (₹ + Points)' }}
+            </UBadge>
           </div>
           <p class="text-xs text-neutral-500">
-            Real-time equity curve mark-to-market with benchmark index correlation
+            Real-time equity curve benchmarking capital efficiency against NIFTY 50
           </p>
         </div>
 
-        <!-- Timeframe Slicers -->
-        <div class="flex items-center gap-1 p-1 rounded-xl bg-neutral-100 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700/60">
-          <button
-            v-for="tf in timeframes"
-            :key="tf"
-            type="button"
-            class="px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer"
-            :class="activeTimeframe === tf
-              ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-2xs'
-              : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'"
-            @click="activeTimeframe = tf"
-          >
-            {{ tf }}
-          </button>
+        <!-- Controls: Display Mode Switcher & Timeframe Slicers -->
+        <div class="flex items-center gap-3 flex-wrap">
+          <!-- Mode Switcher -->
+          <div class="flex items-center gap-1 p-1 rounded-xl bg-neutral-100 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700/60 text-xs">
+            <button
+              type="button"
+              class="px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              :class="chartDisplayMode === 'percent'
+                ? 'bg-white dark:bg-neutral-900 text-primary shadow-xs'
+                : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'"
+              title="Normalized % comparison against NIFTY 50"
+              @click="chartDisplayMode = 'percent'"
+            >
+              <UIcon name="i-lucide-percent" class="h-3.5 w-3.5" />
+              <span>% Alpha</span>
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              :class="chartDisplayMode === 'rupee'
+                ? 'bg-white dark:bg-neutral-900 text-primary shadow-xs'
+                : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'"
+              title="Net Worth vs Invested Capital Baseline"
+              @click="chartDisplayMode = 'rupee'"
+            >
+              <UIcon name="i-lucide-indian-rupee" class="h-3.5 w-3.5" />
+              <span>₹ Net Worth</span>
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              :class="chartDisplayMode === 'dual'
+                ? 'bg-white dark:bg-neutral-900 text-primary shadow-xs'
+                : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'"
+              title="Independent scales for Portfolio (Right) and NIFTY 50 (Left)"
+              @click="chartDisplayMode = 'dual'"
+            >
+              <UIcon name="i-lucide-split" class="h-3.5 w-3.5" />
+              <span>Dual Axis</span>
+            </button>
+          </div>
+
+          <!-- Timeframe Slicers -->
+          <div class="flex items-center gap-1 p-1 rounded-xl bg-neutral-100 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700/60">
+            <button
+              v-for="tf in timeframes"
+              :key="tf"
+              type="button"
+              class="px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer"
+              :class="activeTimeframe === tf
+                ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-2xs'
+                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'"
+              @click="activeTimeframe = tf"
+            >
+              {{ tf }}
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- Live Hover Crosshair HUD Tooltip -->
-      <div
-        v-if="crosshairData"
-        class="flex items-center gap-4 py-2 px-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 text-xs font-mono border border-neutral-200 dark:border-neutral-700"
-      >
-        <div class="text-neutral-500">
-          <span>Date: </span>
-          <strong class="text-neutral-900 dark:text-white">{{ crosshairData.date }}</strong>
+      <!-- INTERACTIVE BLOOMBERG-GRADE HEADS-UP DISPLAY (HUD) -->
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3 p-4 rounded-2xl bg-neutral-50/80 dark:bg-neutral-800/40 border border-neutral-200/80 dark:border-neutral-800 backdrop-blur-sm">
+        <!-- 1. Mark-To-Market -->
+        <div class="space-y-0.5">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Mark-To-Market</div>
+          <div class="text-lg sm:text-xl font-black font-mono text-neutral-900 dark:text-white">
+            {{ fmtCur(activeHud.portfolioValue) }}
+          </div>
+          <div class="text-[11px] font-mono flex items-center gap-1 font-bold" :class="activeHud.netGain >= 0 ? 'text-emerald-500' : 'text-rose-500'">
+            <span>{{ activeHud.netGain >= 0 ? '+' : '' }}{{ fmtCur(activeHud.netGain) }}</span>
+            <span>({{ activeHud.returnPct >= 0 ? '+' : '' }}{{ activeHud.returnPct.toFixed(2) }}%)</span>
+          </div>
         </div>
-        <div>
-          <span class="text-neutral-500">Portfolio: </span>
-          <strong class="text-emerald-500">{{ fmtCur(crosshairData.portfolioValue) }}</strong>
+
+        <!-- 2. Invested Capital -->
+        <div class="space-y-0.5">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Invested Capital</div>
+          <div class="text-lg sm:text-xl font-black font-mono text-neutral-800 dark:text-neutral-200">
+            {{ fmtCur(activeHud.invested) }}
+          </div>
+          <div class="text-[11px] text-neutral-500 font-mono">
+            Date: <strong class="text-neutral-700 dark:text-neutral-300">{{ activeHud.date }}</strong>
+          </div>
         </div>
-        <div>
-          <span class="text-neutral-500">Invested: </span>
-          <strong class="text-neutral-700 dark:text-neutral-300">{{ fmtCur(crosshairData.invested) }}</strong>
+
+        <!-- 3. NIFTY 50 Benchmark -->
+        <div class="space-y-0.5">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Nifty 50 Benchmark</div>
+          <div class="text-lg sm:text-xl font-black font-mono text-indigo-500">
+            {{ activeHud.benchmarkReturn >= 0 ? '+' : '' }}{{ activeHud.benchmarkReturn.toFixed(2) }}%
+          </div>
+          <div class="text-[11px] text-neutral-500 font-mono">
+            Index: {{ activeHud.benchmarkValue?.toLocaleString('en-IN') || '24,745' }} pts
+          </div>
         </div>
-        <div v-if="crosshairData.benchmarkValue">
-          <span class="text-neutral-500">Benchmark: </span>
-          <strong class="text-indigo-500">{{ fmtCur(crosshairData.benchmarkValue) }}</strong>
+
+        <!-- 4. Generated Alpha -->
+        <div class="space-y-0.5">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Alpha Outperformance</div>
+          <div class="text-lg sm:text-xl font-black font-mono" :class="activeHud.alpha >= 0 ? 'text-emerald-500' : 'text-rose-500'">
+            {{ activeHud.alpha >= 0 ? '+' : '' }}{{ activeHud.alpha.toFixed(2) }}%
+          </div>
+          <div>
+            <UBadge :color="activeHud.alpha >= 0 ? 'success' : 'error'" variant="subtle" size="xs">
+              {{ activeHud.alpha >= 0 ? '⚡ Outperforming Index' : '⚠️ Underperforming' }}
+            </UBadge>
+          </div>
+        </div>
+
+        <!-- 5. High Watermark Peak -->
+        <div class="space-y-0.5 col-span-2 md:col-span-1">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Peak Watermark</div>
+          <div class="text-lg sm:text-xl font-black font-mono text-neutral-800 dark:text-neutral-200">
+            {{ fmtCur(highWatermark) }}
+          </div>
+          <div class="text-[11px] font-mono" :class="currentDrawdown < 0 ? 'text-rose-500' : 'text-emerald-500'">
+            Current Drawdown: <strong>{{ currentDrawdown.toFixed(2) }}%</strong>
+          </div>
         </div>
       </div>
 
       <!-- Canvas Mount Container -->
-      <div ref="mainChartContainer" class="w-full h-[340px] relative">
+      <div ref="mainChartContainer" class="w-full h-[380px] relative">
         <div
           v-if="chartPoints.length === 0"
           class="absolute inset-0 flex flex-col items-center justify-center text-center p-6 text-neutral-400"
@@ -531,15 +810,27 @@ function fmtCur(val: number) {
         </div>
       </div>
 
-      <!-- Chart Legend -->
-      <div class="flex items-center gap-5 pt-2 border-t border-neutral-100 dark:border-neutral-800/80 text-xs font-medium text-neutral-600 dark:text-neutral-400">
-        <div class="flex items-center gap-1.5">
-          <span class="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-          <span>Portfolio Net Worth (Mark-to-Market)</span>
+      <!-- Chart Legend & Indicator Status -->
+      <div class="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-neutral-100 dark:border-neutral-800/80 text-xs font-medium text-neutral-600 dark:text-neutral-400">
+        <div class="flex items-center gap-5 flex-wrap">
+          <div class="flex items-center gap-1.5">
+            <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-xs" />
+            <span class="font-bold text-neutral-900 dark:text-white">
+              {{ chartDisplayMode === 'percent' ? 'Portfolio Cumulative Return (%)' : 'Portfolio Net Worth (Mark-To-Market)' }}
+            </span>
+          </div>
+          <div v-if="chartDisplayMode === 'rupee' || chartDisplayMode === 'dual'" class="flex items-center gap-1.5">
+            <span class="h-1.5 w-3 border-b-2 border-dashed border-slate-400" />
+            <span>Invested Capital Baseline</span>
+          </div>
+          <div v-if="chartDisplayMode === 'percent' || chartDisplayMode === 'dual'" class="flex items-center gap-1.5">
+            <span class="h-2.5 w-2.5 rounded-full bg-indigo-500" />
+            <span>Nifty 50 Benchmark Correlation</span>
+          </div>
         </div>
-        <div class="flex items-center gap-1.5">
-          <span class="h-2.5 w-2.5 rounded-full bg-indigo-500" />
-          <span>Nifty 50 Benchmark Correlation</span>
+
+        <div class="text-[11px] font-mono text-neutral-400">
+          Hover over chart to inspect granular mark-to-market valuations
         </div>
       </div>
     </div>
@@ -559,7 +850,7 @@ function fmtCur(val: number) {
             </p>
           </div>
           <UBadge color="error" variant="subtle" size="xs">
-            Peak DD: -{{ summary?.riskMetrics.maxDrawdownPct || 0 }}%
+            Peak DD: -{{ Math.abs(summary?.riskMetrics.maxDrawdownPct || 0) }}%
           </UBadge>
         </div>
 
@@ -615,7 +906,7 @@ function fmtCur(val: number) {
           <div class="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
             <span class="text-neutral-500 font-sans">Max Historic Drawdown</span>
             <span class="font-bold text-rose-500">
-              -{{ summary?.riskMetrics.maxDrawdownPct || 0 }}%
+              -{{ Math.abs(summary?.riskMetrics.maxDrawdownPct || 0) }}%
             </span>
           </div>
 
