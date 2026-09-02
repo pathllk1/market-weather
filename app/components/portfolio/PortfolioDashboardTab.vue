@@ -241,10 +241,9 @@ function initCharts() {
     },
     timeScale: {
       borderColor: theme.borderColor,
-      rightOffset: 6,
-      barSpacing: 14,
-      minBarSpacing: 4,
-      fixLeftEdge: true
+      rightOffset: 0,
+      fixLeftEdge: true,
+      fixRightEdge: true
     },
     handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true },
     handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true }
@@ -340,10 +339,9 @@ function initCharts() {
       },
       timeScale: {
         borderColor: theme.borderColor,
-        rightOffset: 6,
-        barSpacing: 14,
-        minBarSpacing: 4,
-        fixLeftEdge: true
+        rightOffset: 0,
+        fixLeftEdge: true,
+        fixRightEdge: true
       }
     })
 
@@ -517,9 +515,11 @@ function setupResizeObserver() {
   resizeObserver = new ResizeObserver(() => {
     if (mainChartContainer.value && mainChart) {
       mainChart.applyOptions({ width: mainChartContainer.value.clientWidth })
+      mainChart.timeScale().fitContent()
     }
     if (drawdownChartContainer.value && drawdownChart) {
       drawdownChart.applyOptions({ width: drawdownChartContainer.value.clientWidth })
+      drawdownChart.timeScale().fitContent()
     }
   })
 

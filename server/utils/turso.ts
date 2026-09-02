@@ -244,7 +244,42 @@ export async function initTursoSchema(): Promise<void> {
     );
   `)
 
-  await safeAddColumn(db, 'portfolio_trades', 'demat_account_id TEXT')
+  // 14. Mutual Fund Transactions Table (SIPs, Lumpsum, Redemptions)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS portfolio_mf_transactions (
+      id TEXT PRIMARY KEY,
+      portfolio_id TEXT NOT NULL,
+      scheme_code INTEGER NOT NULL,
+      scheme_name TEXT NOT NULL,
+      amc_name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      transaction_type TEXT NOT NULL,
+      transaction_date TEXT NOT NULL,
+      nav REAL NOT NULL,
+      units REAL NOT NULL,
+      amount REAL NOT NULL,
+      stamp_duty REAL DEFAULT 0.0,
+      folio_number TEXT,
+      holding_mode TEXT DEFAULT 'DEMAT',
+      demat_account_id TEXT,
+      notes TEXT,
+      created_at INTEGER NOT NULL
+    );
+  `)
+
+  // 15. User Mutual Fund Preferred Views Table
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS user_mf_views (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      scheme_codes TEXT NOT NULL,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  `)
 
   // Indexes for high-performance parameterized lookups
   try {
@@ -267,6 +302,9 @@ export async function initTursoSchema(): Promise<void> {
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_portfolio_alerts_port ON portfolio_alerts(portfolio_id, is_active);`)
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_portfolio_dividends_port ON portfolio_dividends(portfolio_id, dividend_date DESC);`)
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_demat_accounts_user ON demat_accounts(user_id);`)
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_portfolio_mf_tx_port ON portfolio_mf_transactions(portfolio_id, transaction_date ASC);`)
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_portfolio_mf_tx_scheme ON portfolio_mf_transactions(scheme_code);`)
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_portfolio_mf_tx_demat ON portfolio_mf_transactions(demat_account_id);`)
   } catch {
     // Indexes might already exist
   }

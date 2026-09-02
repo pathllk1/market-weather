@@ -9,6 +9,8 @@ import type {
   RebalanceItem,
   TradeType
 } from '~/types/portfolio'
+import type { MFHoldingsResponse } from '~/types/mutualFunds'
+import { useMutualFunds } from '~/composables/useMutualFunds'
 
 // Page Meta & SEO
 useHead({
@@ -27,14 +29,20 @@ const activePortfolioId = ref<string>('')
 const isLoadingPortfolios = ref(true)
 const isRefreshing = ref(false)
 
+// Mutual Funds Integration
+const { fetchMFHoldings } = useMutualFunds()
+const mfData = ref<MFHoldingsResponse | null>(null)
+const isLoadingMF = ref(false)
+
 // State: Active Portfolio Data
 const summary = ref<PortfolioSummaryResponse | null>(null)
 const trades = ref<PortfolioTrade[]>([])
 const taxSummary = ref<TaxSummary | null>(null)
 const rebalancePlan = ref<RebalanceItem[]>([])
 
-// Master Mode Switcher: Tab 1 (Enterprise Analytics) vs Tab 2 (Operations)
-const masterMode = ref<'analytics' | 'operations'>('analytics')
+// Master Mode Switcher: 4 Tabs
+export type MasterPortfolioTab = 'master' | 'operations' | 'mutual_funds' | 'analytics'
+const masterMode = ref<MasterPortfolioTab>('master')
 
 // State: Operational Sub-Tabs
 type PortfolioTab = 'holdings' | 'risk' | 'allocation' | 'trades' | 'rebalance' | 'tax'
@@ -153,22 +161,36 @@ async function fetchPortfolios(selectId?: string) {
   }
 }
 
+async function loadMFData() {
+  if (!activePortfolioId.value) return
+  isLoadingMF.value = true
+  try {
+    mfData.value = await fetchMFHoldings(activePortfolioId.value)
+  } catch (err) {
+    console.error('Failed to load MF data:', err)
+  } finally {
+    isLoadingMF.value = false
+  }
+}
+
 async function loadActivePortfolioData() {
   if (!activePortfolioId.value) return
   isRefreshing.value = true
   try {
     const dematParam = selectedDematFilter.value ? `?dematId=${selectedDematFilter.value}` : ''
-    const [sumRes, tradesRes, taxRes, rebRes] = await Promise.all([
+    const [sumRes, tradesRes, taxRes, rebRes, mfRes] = await Promise.all([
       $fetch<PortfolioSummaryResponse>(`/api/portfolio/${activePortfolioId.value}/summary${dematParam}`),
       $fetch<{ trades: PortfolioTrade[] }>(`/api/portfolio/${activePortfolioId.value}/trades${dematParam}`),
       $fetch<TaxSummary>(`/api/portfolio/${activePortfolioId.value}/tax`),
-      $fetch<{ plan: RebalanceItem[] }>(`/api/portfolio/${activePortfolioId.value}/rebalance`)
+      $fetch<{ plan: RebalanceItem[] }>(`/api/portfolio/${activePortfolioId.value}/rebalance`),
+      fetchMFHoldings(activePortfolioId.value)
     ])
 
     summary.value = sumRes
     trades.value = tradesRes.trades || []
     taxSummary.value = taxRes
     rebalancePlan.value = rebRes.plan || []
+    mfData.value = mfRes
   } catch (err) {
     console.error('Failed to load portfolio details:', err)
   } finally {
@@ -401,8 +423,51 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- MASTER TWO-TIER TAB SWITCHER -->
-    <div class="flex items-center gap-2 p-1.5 rounded-2xl bg-neutral-100 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700/80 max-w-fit">
+    <!-- MASTER FOUR-TIER TAB SWITCHER -->
+    <div class="flex items-center gap-2 p-1.5 rounded-2xl bg-neutral-100 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700/80 max-w-fit flex-wrap shadow-inner">
+      <!-- 1. Master Wealth Dashboard -->
+      <button
+        type="button"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+        :class="masterMode === 'master'
+          ? 'bg-white dark:bg-neutral-900 text-primary shadow-xs'
+          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'"
+        @click="masterMode = 'master'"
+      >
+        <UIcon name="i-lucide-globe" class="h-4 w-4 text-primary" />
+        <span>Master Wealth Dashboard</span>
+        <UBadge color="primary" variant="subtle" size="xs">Combined</UBadge>
+      </button>
+
+      <!-- 2. Equities (Stocks) -->
+      <button
+        type="button"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+        :class="masterMode === 'operations'
+          ? 'bg-white dark:bg-neutral-900 text-emerald-500 shadow-xs'
+          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'"
+        @click="masterMode = 'operations'"
+      >
+        <UIcon name="i-lucide-trending-up" class="h-4 w-4 text-emerald-500" />
+        <span>Equities (Stocks)</span>
+        <UBadge color="success" variant="subtle" size="xs">{{ summary?.holdings.length || 0 }}</UBadge>
+      </button>
+
+      <!-- 3. Mutual Funds & SIPs -->
+      <button
+        type="button"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+        :class="masterMode === 'mutual_funds'
+          ? 'bg-white dark:bg-neutral-900 text-indigo-500 shadow-xs'
+          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'"
+        @click="masterMode = 'mutual_funds'"
+      >
+        <UIcon name="i-lucide-pie-chart" class="h-4 w-4 text-indigo-500" />
+        <span>Mutual Funds & SIPs</span>
+        <UBadge color="primary" variant="subtle" size="xs">{{ mfData?.holdings.length || 0 }}</UBadge>
+      </button>
+
+      <!-- 4. Enterprise Analytics Dashboard -->
       <button
         type="button"
         class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
@@ -412,22 +477,18 @@ onMounted(async () => {
         @click="masterMode = 'analytics'"
       >
         <UIcon name="i-lucide-line-chart" class="h-4 w-4" />
-        <span>Enterprise Analytics Dashboard</span>
-        <UBadge color="primary" variant="subtle" size="xs">Canvas 60fps</UBadge>
+        <span>Equities Analytics & Radar</span>
+        <UBadge color="neutral" variant="subtle" size="xs">Canvas 60fps</UBadge>
       </button>
+    </div>
 
-      <button
-        type="button"
-        class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
-        :class="masterMode === 'operations'
-          ? 'bg-white dark:bg-neutral-900 text-primary shadow-xs'
-          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'"
-        @click="masterMode = 'operations'"
-      >
-        <UIcon name="i-lucide-layers" class="h-4 w-4" />
-        <span>Holdings & Operations</span>
-        <UBadge color="neutral" variant="subtle" size="xs">{{ summary?.holdings.length || 0 }}</UBadge>
-      </button>
+    <!-- TAB 1: MASTER WEALTH DASHBOARD (COMBINED STOCKS & MUTUAL FUNDS) -->
+    <div v-show="masterMode === 'master'">
+      <PortfolioMasterWealthDashboardTab
+        :summary="summary"
+        :mf-data="mfData"
+        @select-tab="masterMode = ($event as any)"
+      />
     </div>
 
     <!-- TAB 1: ENTERPRISE ANALYTICS DASHBOARD (CANVAS CHARTS) -->
@@ -1148,6 +1209,17 @@ onMounted(async () => {
     </div>
   </div>
 </div>
+
+    <!-- TAB 3: MUTUAL FUNDS & SIPS -->
+    <div v-show="masterMode === 'mutual_funds'">
+      <PortfolioMutualFundsTab
+        :portfolio-id="activePortfolioId"
+        :demat-accounts="summary?.dematAccounts || []"
+        :holdings-data="mfData"
+        :is-loading="isLoadingMF"
+        @refresh="loadMFData"
+      />
+    </div>
 
     <!-- EMBEDDED MODALS -->
     <PortfolioTradeModal

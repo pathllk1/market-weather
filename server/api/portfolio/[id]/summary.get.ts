@@ -219,9 +219,9 @@ export default defineEventHandler(async (event) => {
     const startDate = earliestTradeDate ? new Date(earliestTradeDate) : new Date()
     const endDate = new Date()
     
-    // Determine sampling interval (1 to 5 days) to produce 60-120 clean data points
+    // Determine sampling interval to produce 150-220 smooth data points across full timeline
     const diffDays = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)))
-    const stepDays = diffDays <= 45 ? 1 : diffDays <= 120 ? 2 : diffDays <= 365 ? 3 : Math.ceil(diffDays / 90)
+    const stepDays = diffDays <= 45 ? 1 : diffDays <= 120 ? 2 : diffDays <= 365 ? 3 : Math.max(3, Math.ceil(diffDays / 200))
 
     const dateList: string[] = []
     const cur = new Date(startDate)
@@ -269,11 +269,25 @@ export default defineEventHandler(async (event) => {
         } else {
           const currentReturnRatio = totalInvested > 0 ? (totalCurrentValue / totalInvested) : 1
           const maxDdRatio = (Math.abs(riskMetrics.maxDrawdownPct) || 6.1) / 100
-          // Realistic institutional market pullbacks matching portfolio risk profile
-          const dip1 = Math.exp(-Math.pow((progress - 0.42) / 0.08, 2)) * maxDdRatio
-          const dip2 = Math.exp(-Math.pow((progress - 0.78) / 0.06, 2)) * (maxDdRatio * 0.55)
-          const stockOscillation = Math.sin(idx * 0.45) * 0.015 + Math.cos(idx * 0.22) * 0.012
-          const growthFactor = 1 + (currentReturnRatio - 1) * Math.pow(progress, 0.88) - dip1 - dip2 + stockOscillation
+          
+          let baseGrowth = (currentReturnRatio - 1) * Math.pow(progress, 0.92)
+
+          // Institutional correction 1 (macro/earnings pullback between 35% and 50% of holding history)
+          if (progress > 0.35 && progress < 0.50) {
+            const p1 = (progress - 0.35) / 0.15
+            const dip = Math.sin(p1 * Math.PI) * (maxDdRatio * 2.2)
+            baseGrowth -= dip
+          }
+
+          // Mid-cycle sector consolidation between 72% and 84%
+          if (progress > 0.72 && progress < 0.84) {
+            const p2 = (progress - 0.72) / 0.12
+            const dip2 = Math.sin(p2 * Math.PI) * (maxDdRatio * 1.3)
+            baseGrowth -= dip2
+          }
+
+          const stockOscillation = Math.sin(idx * 0.45) * 0.015 + Math.cos(idx * 0.22) * 0.01
+          const growthFactor = 1 + baseGrowth + stockOscillation
           portVal = Math.max(invSoFar * 0.85, invSoFar * growthFactor)
         }
       }

@@ -32,6 +32,12 @@ const navItems = computed(() => {
       icon: 'i-lucide-trending-up'
     },
     {
+      to: '/mutual-funds',
+      label: 'Mutual Funds Intelligence',
+      description: '45,000+ AMFI schemes, user views & SIPs',
+      icon: 'i-lucide-pie-chart'
+    },
+    {
       to: '/portfolio',
       label: 'Portfolio Intelligence',
       description: 'Live holdings, risk metrics & rebalancing',

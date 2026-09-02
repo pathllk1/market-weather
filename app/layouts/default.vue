@@ -46,6 +46,16 @@ const { user, isAuthenticated, isAdmin, logout } = useAuth()
             </UButton>
 
             <UButton
+              to="/mutual-funds"
+              variant="ghost"
+              size="xs"
+              color="neutral"
+              icon="i-lucide-pie-chart"
+            >
+              Mutual Funds
+            </UButton>
+
+            <UButton
               to="/portfolio"
               variant="ghost"
               size="xs"
