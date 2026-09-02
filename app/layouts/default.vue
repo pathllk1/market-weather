@@ -46,6 +46,16 @@ const { user, isAuthenticated, isAdmin, logout } = useAuth()
             </UButton>
 
             <UButton
+              to="/portfolio"
+              variant="ghost"
+              size="xs"
+              color="neutral"
+              icon="i-lucide-briefcase"
+            >
+              Portfolio
+            </UButton>
+
+            <UButton
               to="/weather"
               variant="ghost"
               size="xs"

@@ -32,6 +32,12 @@ const navItems = computed(() => {
       icon: 'i-lucide-trending-up'
     },
     {
+      to: '/portfolio',
+      label: 'Portfolio Intelligence',
+      description: 'Live holdings, risk metrics & rebalancing',
+      icon: 'i-lucide-briefcase'
+    },
+    {
       to: '/weather',
       label: 'Weather & AQI',
       description: 'National air quality & 51-city matrix',
