@@ -42,6 +42,7 @@ const timeframes = ['1M', '6M', '1Y', '3Y', '5Y', 'ALL'] as const
 const chartContainer = ref<HTMLDivElement | null>(null)
 let chart: IChartApi | null = null
 let areaSeries: ISeriesApi<'Area'> | null = null
+let resizeObserver: any = null
 
 // Hover HUD
 const hoveredPoint = ref<{ date: string; nav: number } | null>(null)
@@ -55,14 +56,14 @@ const pageSize = 15
 // Fetch scheme details when modal opens or schemeCode changes
 watch(
   [() => props.modelValue, () => props.schemeCode],
-  async ([open, code]) => {
+  async ([open, code], [prevOpen]) => {
+    if (typeof window === 'undefined') return
     if (open && code && code > 0) {
       await fetchSchemeDetails(code)
-    } else if (!open) {
+    } else if (!open && prevOpen) {
       cleanupChart()
     }
-  },
-  { immediate: true }
+  }
 )
 
 async function fetchSchemeDetails(code: number) {
@@ -146,9 +147,8 @@ watch(activeTimeframe, () => {
   }
 })
 
-let resizeObserver: ResizeObserver | null = null
-
 function observeContainer() {
+  if (typeof window === 'undefined' || typeof ResizeObserver === 'undefined') return
   if (resizeObserver) {
     resizeObserver.disconnect()
     resizeObserver = null
@@ -172,6 +172,7 @@ function observeContainer() {
 }
 
 function initChart() {
+  if (typeof window === 'undefined') return
   if (!chartContainer.value || !fundData.value) return
   cleanupChart()
 
@@ -303,6 +304,7 @@ function applyChartTheme() {
 }
 
 function cleanupChart() {
+  if (typeof window === 'undefined') return
   if (resizeObserver) {
     resizeObserver.disconnect()
     resizeObserver = null
