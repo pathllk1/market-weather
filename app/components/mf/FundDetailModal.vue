@@ -163,11 +163,32 @@ function handleInvestClick() {
             <UIcon name="i-lucide-plus" class="h-4 w-4" />
             <span>Invest</span>
           </button>
+
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-x"
+            size="sm"
+            class="cursor-pointer -mr-2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+            aria-label="Close"
+            @click="isOpen = false"
+          />
         </div>
       </div>
-      <div v-else-if="isLoading" class="flex items-center gap-2">
-        <UIcon name="i-lucide-loader-2" class="animate-spin text-primary" />
-        <span class="text-xs font-medium text-neutral-400">Loading fund intelligence...</span>
+      <div v-else-if="isLoading" class="flex items-center justify-between w-full">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-loader-2" class="animate-spin text-primary" />
+          <span class="text-xs font-medium text-neutral-400">Loading fund intelligence...</span>
+        </div>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-x"
+          size="sm"
+          class="cursor-pointer -mr-2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+          aria-label="Close"
+          @click="isOpen = false"
+        />
       </div>
     </template>
 

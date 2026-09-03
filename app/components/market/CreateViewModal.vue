@@ -139,8 +139,23 @@ async function handleSave() {
 <template>
   <UModal
     v-model:open="isOpen"
-    :title="isEditing ? 'Edit Market View' : 'Create Preferred View'"
   >
+    <template #header>
+      <div class="flex items-center justify-between w-full">
+        <h3 class="text-base font-bold text-neutral-900 dark:text-white">
+          {{ isEditing ? 'Edit Market View' : 'Create Preferred View' }}
+        </h3>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-x"
+          size="sm"
+          class="cursor-pointer -mr-2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+          aria-label="Close"
+          @click="isOpen = false"
+        />
+      </div>
+    </template>
     <template #body>
       <div class="space-y-4">
         <!-- Error Alert -->

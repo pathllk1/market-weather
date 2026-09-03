@@ -84,10 +84,27 @@ async function handleSubmit() {
 <template>
   <UModal
     v-model:open="isOpen"
-    title="Target & Stop-Loss"
-    :description="`${symbol} (Current: ₹${currentPrice.toFixed(2)})`"
     :ui="{ content: 'sm:max-w-md' }"
   >
+    <template #header>
+      <div class="flex items-start justify-between w-full">
+        <div>
+          <h3 class="font-bold text-base text-neutral-900 dark:text-white">Target & Stop-Loss</h3>
+          <p class="text-xs text-neutral-400 font-mono">
+            {{ symbol }} • Current: ₹{{ currentPrice.toFixed(2) }}
+          </p>
+        </div>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-x"
+          size="sm"
+          class="cursor-pointer -mr-2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+          aria-label="Close"
+          @click="isOpen = false"
+        />
+      </div>
+    </template>
     <template #body>
       <div class="space-y-4">
         <form class="space-y-3" @submit.prevent="handleSubmit">

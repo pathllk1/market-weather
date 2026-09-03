@@ -97,10 +97,29 @@ async function handleSubmit() {
 <template>
   <UModal
     v-model:open="isOpen"
-    :title="isEditing ? 'Edit Portfolio Configuration' : 'Create New Portfolio'"
-    description="Manage asset baskets, benchmarks, and tax cost methods"
     :ui="{ content: 'sm:max-w-lg' }"
   >
+    <template #header>
+      <div class="flex items-start justify-between w-full">
+        <div>
+          <h3 class="font-bold text-base text-neutral-900 dark:text-white">
+            {{ isEditing ? 'Edit Portfolio Configuration' : 'Create New Portfolio' }}
+          </h3>
+          <p class="text-xs text-neutral-400">
+            Manage asset baskets, benchmarks, and tax cost methods
+          </p>
+        </div>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-x"
+          size="sm"
+          class="cursor-pointer -mr-2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+          aria-label="Close"
+          @click="isOpen = false"
+        />
+      </div>
+    </template>
     <template #body>
       <div class="space-y-4">
         <form class="space-y-3" @submit.prevent="handleSubmit">

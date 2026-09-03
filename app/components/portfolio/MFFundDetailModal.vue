@@ -400,20 +400,33 @@ function handleOpenLog() {
           </p>
         </div>
 
-        <!-- Live NAV Card -->
-        <div v-if="fundData" class="text-right shrink-0">
-          <div class="text-xs text-neutral-400">Live AMFI NAV</div>
-          <div class="text-lg sm:text-xl font-mono font-bold text-neutral-900 dark:text-white">
-            ₹{{ fundData.currentNav.toFixed(2) }}
+        <div class="flex items-start gap-3 shrink-0">
+          <!-- Live NAV Card -->
+          <div v-if="fundData" class="text-right">
+            <div class="text-xs text-neutral-400">Live AMFI NAV</div>
+            <div class="text-lg sm:text-xl font-mono font-bold text-neutral-900 dark:text-white">
+              ₹{{ fundData.currentNav.toFixed(2) }}
+            </div>
+            <div
+              v-if="fundData.oneDayChangePct !== 0"
+              class="text-xs font-semibold flex items-center justify-end gap-0.5"
+              :class="fundData.oneDayChangePct >= 0 ? 'text-emerald-500' : 'text-rose-500'"
+            >
+              <UIcon :name="fundData.oneDayChangePct >= 0 ? 'i-lucide-trending-up' : 'i-lucide-trending-down'" class="h-3 w-3" />
+              <span>{{ fundData.oneDayChangePct >= 0 ? '+' : '' }}{{ fundData.oneDayChangePct.toFixed(2) }}%</span>
+            </div>
           </div>
-          <div
-            v-if="fundData.oneDayChangePct !== 0"
-            class="text-xs font-semibold flex items-center justify-end gap-0.5"
-            :class="fundData.oneDayChangePct >= 0 ? 'text-emerald-500' : 'text-rose-500'"
-          >
-            <UIcon :name="fundData.oneDayChangePct >= 0 ? 'i-lucide-trending-up' : 'i-lucide-trending-down'" class="h-3 w-3" />
-            <span>{{ fundData.oneDayChangePct >= 0 ? '+' : '' }}{{ fundData.oneDayChangePct.toFixed(2) }}%</span>
-          </div>
+
+          <!-- Close Button -->
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-x"
+            size="sm"
+            class="cursor-pointer -mt-1 -mr-2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+            aria-label="Close"
+            @click="isOpen = false"
+          />
         </div>
       </div>
     </template>

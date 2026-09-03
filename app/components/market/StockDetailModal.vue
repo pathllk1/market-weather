@@ -134,18 +134,39 @@ function handleTradeClick(type: 'BUY' | 'SELL' = 'BUY') {
               <UIcon name="i-lucide-minus" class="h-3.5 w-3.5" />
               <span>SELL</span>
             </button>
+
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-x"
+              size="sm"
+              class="cursor-pointer -mr-2 ml-1 text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+              aria-label="Close"
+              @click="isOpen = false"
+            />
           </div>
         </div>
       </div>
       <div
         v-else-if="isLoading"
-        class="flex items-center gap-2"
+        class="flex items-center justify-between w-full"
       >
-        <UIcon
-          name="i-lucide-loader-2"
-          class="animate-spin text-primary"
+        <div class="flex items-center gap-2">
+          <UIcon
+            name="i-lucide-loader-2"
+            class="animate-spin text-primary"
+          />
+          <span class="text-sm font-semibold">Loading stock intelligence...</span>
+        </div>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-x"
+          size="sm"
+          class="cursor-pointer -mr-2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+          aria-label="Close"
+          @click="isOpen = false"
         />
-        <span class="text-sm font-semibold">Loading stock intelligence...</span>
       </div>
     </template>
 

@@ -132,18 +132,29 @@ async function handleSave() {
 <template>
   <UModal v-model:open="isOpen" :ui="{ content: 'max-w-xl' }">
     <template #header>
-      <div class="flex items-center gap-3">
-        <div class="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-          <UIcon :name="isEditing ? 'i-lucide-edit-3' : 'i-lucide-folder-plus'" class="h-5 w-5" />
+      <div class="flex items-start justify-between w-full">
+        <div class="flex items-center gap-3">
+          <div class="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+            <UIcon :name="isEditing ? 'i-lucide-edit-3' : 'i-lucide-folder-plus'" class="h-5 w-5" />
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-neutral-900 dark:text-white">
+              {{ isEditing ? 'Edit Mutual Fund View' : 'Create Custom Mutual Fund View' }}
+            </h3>
+            <p class="text-xs text-neutral-400">
+              Save custom baskets of Indian mutual fund schemes for tracking and screening
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 class="text-base font-bold text-neutral-900 dark:text-white">
-            {{ isEditing ? 'Edit Mutual Fund View' : 'Create Custom Mutual Fund View' }}
-          </h3>
-          <p class="text-xs text-neutral-400">
-            Save custom baskets of Indian mutual fund schemes for tracking and screening
-          </p>
-        </div>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-x"
+          size="sm"
+          class="cursor-pointer -mr-2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+          aria-label="Close"
+          @click="isOpen = false"
+        />
       </div>
     </template>
 

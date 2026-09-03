@@ -217,7 +217,21 @@ onMounted(() => {
     </div>
 
     <!-- Add Blacklist Modal using Nuxt UI UModal -->
-    <UModal v-model:open="isModalOpen" title="Blacklist Traffic Source">
+    <UModal v-model:open="isModalOpen">
+      <template #header>
+        <div class="flex items-center justify-between w-full">
+          <h3 class="text-base font-bold text-neutral-900 dark:text-white">Blacklist Traffic Source</h3>
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-x"
+            size="sm"
+            class="cursor-pointer -mr-2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+            aria-label="Close"
+            @click="isModalOpen = false"
+          />
+        </div>
+      </template>
       <template #body>
         <div class="space-y-4">
           <div class="flex items-center gap-4">

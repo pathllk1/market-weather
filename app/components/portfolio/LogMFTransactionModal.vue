@@ -214,7 +214,7 @@ async function handleSubmit() {
     }"
   >
     <template #header>
-      <div class="flex items-center justify-between w-full pr-4">
+      <div class="flex items-center justify-between w-full">
         <div class="flex items-center gap-2.5">
           <div class="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
             <UIcon name="i-lucide-pie-chart" class="h-5 w-5" />
@@ -224,6 +224,15 @@ async function handleSubmit() {
             <p class="text-xs text-neutral-400">AMFI Live NAV tracked via MFAPI.in</p>
           </div>
         </div>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-x"
+          size="sm"
+          class="cursor-pointer -mr-2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+          aria-label="Close"
+          @click="isOpen = false"
+        />
       </div>
     </template>
 

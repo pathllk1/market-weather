@@ -321,13 +321,26 @@ function fmtCur(val: number) {
           </div>
         </div>
 
-        <!-- Step Indicator -->
-        <div class="hidden sm:flex items-center gap-1 text-xs font-semibold text-neutral-400">
-          <span :class="currentStep === 1 ? 'text-primary font-bold' : ''">1. Upload</span>
-          <span>→</span>
-          <span :class="currentStep === 2 ? 'text-primary font-bold' : ''">2. Schemes</span>
-          <span>→</span>
-          <span :class="currentStep === 3 ? 'text-primary font-bold' : ''">3. Transactions</span>
+        <div class="flex items-center gap-3">
+          <!-- Step Indicator -->
+          <div class="hidden sm:flex items-center gap-1 text-xs font-semibold text-neutral-400">
+            <span :class="currentStep === 1 ? 'text-primary font-bold' : ''">1. Upload</span>
+            <span>→</span>
+            <span :class="currentStep === 2 ? 'text-primary font-bold' : ''">2. Schemes</span>
+            <span>→</span>
+            <span :class="currentStep === 3 ? 'text-primary font-bold' : ''">3. Transactions</span>
+          </div>
+
+          <!-- Close Button -->
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-x"
+            size="sm"
+            class="cursor-pointer -mr-2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+            aria-label="Close"
+            @click="isOpen = false"
+          />
         </div>
       </div>
     </template>
