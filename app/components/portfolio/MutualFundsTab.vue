@@ -62,13 +62,12 @@ function openNewInvest() {
   isLogModalOpen.value = true
 }
 
-function handleInvestFromDetail(schemeCode: number) {
+function handleRecordTransactionFromDetail(scheme: { code: number; name: string; nav?: number }) {
   isDetailModalOpen.value = false
-  const found = props.holdingsData?.holdings.find(h => h.schemeCode === schemeCode)
   selectedHoldingToInvest.value = {
-    schemeCode,
-    schemeName: found?.schemeName || `Scheme #${schemeCode}`,
-    nav: found?.currentNav
+    schemeCode: scheme.code,
+    schemeName: scheme.name,
+    nav: scheme.nav
   }
   isLogModalOpen.value = true
 }
@@ -245,7 +244,8 @@ function fmtCur(val: number) {
             <tr
               v-for="h in filteredHoldings"
               :key="h.schemeCode"
-              class="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors"
+              class="hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40 transition-colors cursor-pointer group"
+              @click="openFundChart(h.schemeCode)"
             >
               <!-- Scheme Info -->
               <td class="p-4 pl-6">
@@ -313,13 +313,13 @@ function fmtCur(val: number) {
               </td>
 
               <!-- Action Buttons -->
-              <td class="p-4 text-right pr-6">
+              <td class="p-4 text-right pr-6" @click.stop>
                 <div class="flex items-center justify-end gap-1.5">
                   <UButton
                     color="primary"
                     size="xs"
                     icon="i-lucide-plus"
-                    @click="openInvestHolding(h)"
+                    @click.stop="openInvestHolding(h)"
                   >
                     + Invest
                   </UButton>
@@ -327,9 +327,9 @@ function fmtCur(val: number) {
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    icon="i-lucide-line-chart"
-                    title="Inspect Historical NAV Chart"
-                    @click="openFundChart(h.schemeCode)"
+                    icon="i-lucide-activity"
+                    title="Fund Analytics, XIRR & History"
+                    @click.stop="openFundChart(h.schemeCode)"
                   />
                 </div>
               </td>
@@ -348,10 +348,11 @@ function fmtCur(val: number) {
       @saved="$emit('refresh')"
     />
 
-    <MfFundDetailModal
+    <PortfolioMFFundDetailModal
       v-model="isDetailModalOpen"
+      :portfolio-id="portfolioId"
       :scheme-code="selectedSchemeCode"
-      @invest="handleInvestFromDetail"
+      @record-transaction="handleRecordTransactionFromDetail"
     />
 
     <PortfolioCASImportModal
