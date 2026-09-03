@@ -234,16 +234,16 @@ export async function parseCASPDF(pdfBuffer: Uint8Array, password?: string): Pro
       const line = allLines[i]!.fullText
 
       let isin: string | null = null
-      const isinMatch = line.match(/ISIN:\s*([A-Z0-9]{12})/i)
+      const isinMatch = line.match(/ISIN\s*:\s*(INF[A-Z0-9]{6,12})/i)
       if (isinMatch) {
         isin = isinMatch[1]!.toUpperCase()
       } else {
-        const splitMatch = line.match(/ISIN:\s*([A-Z0-9]{6,11})$/i)
+        const splitMatch = line.match(/ISIN\s*:\s*([A-Z0-9]{6,11})$/i)
         if (splitMatch && i + 1 < allLines.length) {
           const nextPart = allLines[i + 1]!.fullText.match(/^([A-Z0-9]{1,6})/i)
           if (nextPart) {
             const combined = (splitMatch[1]! + nextPart[1]!).toUpperCase()
-            if (combined.length === 12 && combined.startsWith('INF')) {
+            if (combined.startsWith('INF')) {
               isin = combined
             }
           }
@@ -276,6 +276,9 @@ export async function parseCASPDF(pdfBuffer: Uint8Array, password?: string): Pro
                      .replace(/^[A-Z0-9]+-/, '')
                      .replace(/^[-–\s]+/, '')
                      .trim()
+        if (sName.length < 5 && i > 0) {
+          sName = allLines[i - 1]!.fullText.replace(/Registrar\s*:.*$/i, '').trim()
+        }
 
         let amc = 'Mutual Fund'
         const AMC_LIST = [
@@ -393,10 +396,11 @@ export async function parseCASPDF(pdfBuffer: Uint8Array, password?: string): Pro
         const absAmount = Math.abs(amount)
         const absUnits = Math.abs(units)
 
-        let txType: 'BUY_SIP' | 'BUY_LUMPSUM' | 'REDEMPTION' = 'BUY_SIP'
         const lowerDesc = desc.toLowerCase()
+        const isReversal = lowerDesc.includes('reversal') || lowerDesc.includes('rejection') || lowerDesc.includes('payment not received')
 
-        if (lowerDesc.includes('redemption') || amount < 0 || units < 0) {
+        let txType: 'BUY_SIP' | 'BUY_LUMPSUM' | 'REDEMPTION' = 'BUY_SIP'
+        if (lowerDesc.includes('redemption') || isReversal || amount < 0 || units < 0) {
           txType = 'REDEMPTION'
         } else if (lowerDesc.includes('sip') || lowerDesc.includes('systematic')) {
           txType = 'BUY_SIP'
@@ -404,16 +408,13 @@ export async function parseCASPDF(pdfBuffer: Uint8Array, password?: string): Pro
           txType = 'BUY_LUMPSUM'
         }
 
-        const isReversal = lowerDesc.includes('reversal') || lowerDesc.includes('rejection') || lowerDesc.includes('payment not received')
-
         // Mathematical Ledger calculation
-        if (!isReversal) {
-          if (txType === 'REDEMPTION') {
-            calculatedUnits -= absUnits
-          } else {
-            calculatedUnits += absUnits
-            totalInvested += absAmount
-          }
+        if (txType === 'REDEMPTION') {
+          calculatedUnits -= absUnits
+          totalInvested -= absAmount
+        } else {
+          calculatedUnits += absUnits
+          totalInvested += absAmount
         }
 
         const txn: CASTransaction = {
@@ -435,10 +436,10 @@ export async function parseCASPDF(pdfBuffer: Uint8Array, password?: string): Pro
           description: desc,
           isReversal,
           isDuplicate: false,
-          selected: !isReversal
+          selected: true // Both purchase and reversal must be included so they net out to 0
         }
 
-        if (txType !== 'REDEMPTION' && !isReversal) {
+        if (txType !== 'REDEMPTION') {
           lastPurchaseTxn = txn
         } else {
           lastPurchaseTxn = null

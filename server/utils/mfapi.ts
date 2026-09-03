@@ -168,6 +168,17 @@ export async function findSchemeByISIN(isin: string): Promise<MFMasterSchemeItem
   const clean = (isin || '').trim().toUpperCase()
   if (!clean) return null
   const isinMap = await getMFMasterList()
-  return isinMap.get(clean) || null
+  const direct = isinMap.get(clean)
+  if (direct) return direct
+
+  // If truncated in PDF (e.g. INF109K015)
+  if (clean.length >= 8 && masterListCache?.items) {
+    const found = masterListCache.items.find(it => 
+      (it.isinGrowth && it.isinGrowth.toUpperCase().startsWith(clean)) ||
+      (it.isinDivReinvestment && it.isinDivReinvestment.toUpperCase().startsWith(clean))
+    )
+    if (found) return found
+  }
+  return null
 }
 
