@@ -20,6 +20,7 @@ const { getCategoryBadgeColor } = useMutualFunds()
 // Modals
 const isLogModalOpen = ref(false)
 const isDetailModalOpen = ref(false)
+const isCASImportModalOpen = ref(false)
 const selectedSchemeCode = ref<number | null>(null)
 const selectedHoldingToInvest = ref<{ schemeCode: number; schemeName: string; nav?: number } | null>(null)
 
@@ -159,10 +160,20 @@ function fmtCur(val: number) {
 
       <div class="flex items-center gap-2">
         <UButton
+          color="neutral"
+          variant="outline"
+          icon="i-lucide-file-up"
+          size="sm"
+          class="cursor-pointer font-medium"
+          @click="isCASImportModalOpen = true"
+        >
+          Import CAS Statement (PDF)
+        </UButton>
+        <UButton
           color="primary"
           icon="i-lucide-plus"
           size="sm"
-          class="cursor-pointer"
+          class="cursor-pointer font-medium"
           @click="openNewInvest"
         >
           Record SIP / Lumpsum
@@ -192,14 +203,28 @@ function fmtCur(val: number) {
             Track your SIPs and lumpsum investments with automatic daily AMFI NAV updates powered by MFAPI.in.
           </p>
         </div>
-        <UButton
-          color="primary"
-          icon="i-lucide-plus"
-          size="md"
-          @click="isLogModalOpen = true"
-        >
-          Record First SIP Investment
-        </UButton>
+        <div class="flex items-center justify-center gap-3 pt-2">
+          <UButton
+            color="primary"
+            variant="solid"
+            icon="i-lucide-file-up"
+            size="md"
+            class="cursor-pointer"
+            @click="isCASImportModalOpen = true"
+          >
+            Import CAS (PDF)
+          </UButton>
+          <UButton
+            color="neutral"
+            variant="outline"
+            icon="i-lucide-plus"
+            size="md"
+            class="cursor-pointer"
+            @click="isLogModalOpen = true"
+          >
+            Record Manually
+          </UButton>
+        </div>
       </div>
 
       <!-- Holdings Table -->
@@ -327,6 +352,13 @@ function fmtCur(val: number) {
       v-model="isDetailModalOpen"
       :scheme-code="selectedSchemeCode"
       @invest="handleInvestFromDetail"
+    />
+
+    <PortfolioCASImportModal
+      v-model="isCASImportModalOpen"
+      :portfolio-id="portfolioId"
+      :demat-accounts="dematAccounts"
+      @imported="$emit('refresh')"
     />
   </div>
 </template>
