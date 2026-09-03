@@ -332,8 +332,8 @@ export async function parseCASPDF(pdfBuffer: Uint8Array, password?: string): Pro
         }
       }
 
-      // Pre-match scheme with MFAPI via ISIN
-      const mfapiMatch = await findSchemeByISIN(block.isin)
+      // Pre-match scheme with MFAPI via ISIN and scheme name ranking
+      const mfapiMatch = await findSchemeByISIN(block.isin, block.casSchemeName)
       let matchedSchemeCode = mfapiMatch ? mfapiMatch.schemeCode : null
       let matchedSchemeName = mfapiMatch ? mfapiMatch.schemeName : null
 

@@ -164,21 +164,69 @@ export async function getMFMasterList(): Promise<Map<string, MFMasterSchemeItem>
   }
 }
 
-export async function findSchemeByISIN(isin: string): Promise<MFMasterSchemeItem | null> {
+export async function findSchemeByISIN(isin: string, schemeName?: string): Promise<MFMasterSchemeItem | null> {
   const clean = (isin || '').trim().toUpperCase()
-  if (!clean) return null
   const isinMap = await getMFMasterList()
-  const direct = isinMap.get(clean)
-  if (direct) return direct
 
-  // If truncated in PDF (e.g. INF109K015)
-  if (clean.length >= 8 && masterListCache?.items) {
-    const found = masterListCache.items.find(it => 
-      (it.isinGrowth && it.isinGrowth.toUpperCase().startsWith(clean)) ||
-      (it.isinDivReinvestment && it.isinDivReinvestment.toUpperCase().startsWith(clean))
-    )
-    if (found) return found
+  if (clean.length === 12 && isinMap.has(clean)) {
+    return isinMap.get(clean)!
   }
-  return null
+
+  const nameLower = (schemeName || '').toLowerCase()
+  const isDirect = nameLower.includes('direct')
+  const isGrowth = nameLower.includes('growth')
+  const hasUltra = nameLower.includes('ultra')
+
+  let candidates: MFMasterSchemeItem[] = []
+  if (clean.length >= 7) {
+    for (const item of isinMap.values()) {
+      const g = item.isinGrowth ? item.isinGrowth.toUpperCase() : ''
+      const d = item.isinDivReinvestment ? item.isinDivReinvestment.toUpperCase() : ''
+      if (g.startsWith(clean) || d.startsWith(clean)) {
+        candidates.push(item)
+      }
+    }
+  }
+
+  if (candidates.length === 0 && isinMap.has(clean)) {
+    return isinMap.get(clean)!
+  }
+
+  if (candidates.length === 0) {
+    return null
+  }
+
+  const words = nameLower
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !['fund', 'plan', 'option', 'formerly'].includes(w))
+
+  let bestScore = -100
+  let bestItem: MFMasterSchemeItem | null = null
+
+  for (const c of candidates) {
+    const cName = c.schemeName.toLowerCase()
+    let score = 0
+    for (const w of words) {
+      if (cName.includes(w)) score += 3
+    }
+    if (isDirect && cName.includes('direct')) score += 5
+    if (!isDirect && cName.includes('regular')) score += 5
+    if (isGrowth && cName.includes('growth')) score += 4
+
+    // Penalize ultra if source doesn't have ultra
+    if (!hasUltra && cName.includes('ultra')) score -= 15
+    if (hasUltra && cName.includes('ultra')) score += 10
+
+    const g = c.isinGrowth ? c.isinGrowth.toUpperCase() : ''
+    if (clean.length >= 7 && g.startsWith(clean)) score += 20
+
+    if (score > bestScore) {
+      bestScore = score
+      bestItem = c
+    }
+  }
+
+  return bestItem
 }
 
