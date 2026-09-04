@@ -4,7 +4,6 @@ import type { UserMarketView } from '~/types/market'
 const props = defineProps<{
   modelValue: boolean
   viewToEdit: UserMarketView | null
-  availableSymbols: { symbol: string, company_name: string }[]
 }>()
 
 const emit = defineEmits<{
@@ -60,21 +59,31 @@ interface SearchItem {
 const searchResults = ref<SearchItem[]>([])
 const isSearching = ref(false)
 
+async function fetchEquities(queryStr: string) {
+  isSearching.value = true
+  try {
+    const res = await $fetch<{ results: SearchItem[] }>('/api/market/search', {
+      query: { q: queryStr }
+    })
+    searchResults.value = res.results || []
+  } catch {
+    searchResults.value = []
+  } finally {
+    isSearching.value = false
+  }
+}
+
+watch(isOpen, (open) => {
+  if (open) {
+    fetchEquities(symbolSearch.value.trim())
+  }
+})
+
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 watch(symbolSearch, (q) => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
-  searchDebounceTimer = setTimeout(async () => {
-    isSearching.value = true
-    try {
-      const res = await $fetch<{ results: SearchItem[] }>('/api/market/search', {
-        query: { q: q.trim() }
-      })
-      searchResults.value = res.results || []
-    } catch {
-      searchResults.value = []
-    } finally {
-      isSearching.value = false
-    }
+  searchDebounceTimer = setTimeout(() => {
+    fetchEquities(q.trim())
   }, 200)
 }, { immediate: true })
 

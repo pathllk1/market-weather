@@ -3,7 +3,7 @@ import { getWeatherMarketCorrelations } from '../../utils/weather'
 
 export default defineEventHandler(async () => {
   try {
-    const data = getWeatherMarketCorrelations()
+    const data = await getWeatherMarketCorrelations()
     return {
       success: true,
       data

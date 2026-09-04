@@ -455,13 +455,30 @@ export async function getWeatherRankings(): Promise<WeatherRankingsResponse> {
   }
 }
 
-export function getWeatherMarketCorrelations(): MarketWeatherSectorImpact[] {
+export async function getWeatherMarketCorrelations(): Promise<MarketWeatherSectorImpact[]> {
+  let pulse: NationalWeatherPulse | null = null
+  try {
+    const snapshot = await getLatestWeatherSnapshots()
+    pulse = snapshot.pulse
+  } catch (err) {
+    console.warn('[Weather correlations] Failed to fetch live snapshot:', err)
+  }
+
+  const hottestTemp = pulse?.hottestCity?.temperature ? `${pulse.hottestCity.temperature}°C` : 'elevated temperatures'
+  const hottestCityName = pulse?.hottestCity?.city || 'northern plains'
+  const rainCitiesCount = pulse?.activeRainCount || 0
+  const maxRainCity = pulse?.highestRainCity ? `${pulse.highestRainCity.city} (${pulse.highestRainCity.precipitation}mm)` : null
+  const mostPollutedCityName = pulse?.mostPollutedCity?.city || 'NCR'
+  const maxAqi = pulse?.mostPollutedCity?.aqi ? pulse.mostPollutedCity.aqi : 150
+
   return [
     {
       sector: 'Agriculture & Fertilizers',
-      metric: 'Monsoon Rainfall & Precipitation Spread',
-      status: 'positive',
-      summary: 'Widespread monsoon coverage across central & eastern belts boosts Kharif sowing and fertilizer demand.',
+      metric: rainCitiesCount > 0 ? `Active Rain in ${rainCitiesCount} Cities` : 'Monsoon Precipitation Spread',
+      status: rainCitiesCount > 3 ? 'positive' : 'watch',
+      summary: maxRainCity
+        ? `Monsoon activity highest in ${maxRainCity}, supporting Kharif sowing and fertilizer demand.`
+        : 'Regional precipitation patterns across central & eastern belts influence Kharif sowing and fertilizer demand.',
       stocks: [
         { symbol: 'PARADEEP.NS', name: 'Paradeep Phosphates', correlationFactor: 'High DAP/NPK demand' },
         { symbol: 'UPL.NS', name: 'UPL Limited', correlationFactor: 'Crop protection volumes' },
@@ -470,9 +487,9 @@ export function getWeatherMarketCorrelations(): MarketWeatherSectorImpact[] {
     },
     {
       sector: 'Power & Energy Generation',
-      metric: 'Heatwave & Peak Thermal Comfort Index',
-      status: 'watch',
-      summary: 'Elevated apparent temperatures (33-36°C) in northern plains drive cooling loads and peak power demand.',
+      metric: `Peak Heat Index: ${hottestTemp}`,
+      status: pulse?.hottestCity?.temperature && pulse.hottestCity.temperature >= 35 ? 'positive' : 'watch',
+      summary: `Peak temperatures reaching ${hottestTemp} in ${hottestCityName} drive institutional cooling loads and grid power demand.`,
       stocks: [
         { symbol: 'TATAPOWER.NS', name: 'Tata Power', correlationFactor: 'Discom peak load demand' },
         { symbol: 'NTPC.NS', name: 'NTPC Limited', correlationFactor: 'Thermal base load utilization' },
@@ -481,9 +498,9 @@ export function getWeatherMarketCorrelations(): MarketWeatherSectorImpact[] {
     },
     {
       sector: 'Air Purification & Healthcare',
-      metric: 'Severe AQI Spikes (>150)',
-      status: 'positive',
-      summary: 'Early post-monsoon particulate accumulation in NCR increases demand for respiratory devices and home air purifiers.',
+      metric: `Peak AQI: ${maxAqi} (${mostPollutedCityName})`,
+      status: maxAqi >= 120 ? 'positive' : 'neutral',
+      summary: `Air quality readings peaking at ${maxAqi} AQI in ${mostPollutedCityName} elevate demand for respiratory solutions and air treatment appliances.`,
       stocks: [
         { symbol: 'VOLTAS.NS', name: 'Voltas', correlationFactor: 'Air treatment & HVAC units' },
         { symbol: 'HAVELLS.NS', name: 'Havells India', correlationFactor: 'Appliance & air purifier segment' }

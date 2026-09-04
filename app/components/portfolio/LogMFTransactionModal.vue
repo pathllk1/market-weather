@@ -281,7 +281,7 @@ async function handleSubmit() {
         <!-- 2. Scheme Search Bar -->
         <div class="space-y-1.5 relative">
           <label class="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-            Search Mutual Fund Scheme (45,000+ Direct & Regular Plans)
+            Search Mutual Fund Scheme (Direct & Regular Plans)
           </label>
           <div class="relative">
             <UInput

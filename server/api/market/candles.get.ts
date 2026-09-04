@@ -1,5 +1,10 @@
 import { getTursoClient } from '../../utils/turso'
 import { getLiveQuotes } from '../../utils/yahoo'
+import YahooFinance from 'yahoo-finance2'
+
+const yf = new YahooFinance({
+  suppressNotices: ['yahooSurvey']
+})
 
 const RANGE_CANDLE_LIMITS: Record<string, number> = {
   '1D': 1,
@@ -33,28 +38,71 @@ export default defineEventHandler(async (event) => {
   const db = getTursoClient()
 
   // Retrieve historical candles with lookback warmup buffer
-  const res = await db.execute({
-    sql: `
-      SELECT date, open, high, low, close, volume
-      FROM historical_candles
-      WHERE symbol IN (?, ?)
-      ORDER BY date DESC
-      LIMIT ?
-    `,
-    args: [symbolWithNs, symbolWithoutNs, fetchLimit]
-  })
+  let allCandles: Array<{
+    date: string
+    open: number
+    high: number
+    low: number
+    close: number
+    volume: number
+  }> = []
 
-  // Format all candles and reverse to chronological order (oldest to newest)
-  const allCandles = res.rows
-    .map(row => ({
-      date: String(row.date),
-      open: Number(row.open),
-      high: Number(row.high),
-      low: Number(row.low),
-      close: Number(row.close),
-      volume: Number(row.volume)
-    }))
-    .reverse()
+  try {
+    const res = await db.execute({
+      sql: `
+        SELECT date, open, high, low, close, volume
+        FROM historical_candles
+        WHERE symbol IN (?, ?)
+        ORDER BY date DESC
+        LIMIT ?
+      `,
+      args: [symbolWithNs, symbolWithoutNs, fetchLimit]
+    })
+
+    // Format all candles and reverse to chronological order (oldest to newest)
+    allCandles = res.rows
+      .map(row => ({
+        date: String(row.date),
+        open: Number(row.open),
+        high: Number(row.high),
+        low: Number(row.low),
+        close: Number(row.close),
+        volume: Number(row.volume)
+      }))
+      .reverse()
+  } catch (dbErr) {
+    console.warn(`[Candles API] DB query failed for ${symbolWithNs}:`, dbErr)
+  }
+
+  // Fallback to Yahoo Finance historical chart if DB returned no candles
+  if (allCandles.length === 0) {
+    try {
+      const days = range === '1D' ? 10 : range === '5D' ? 20 : range === '1M' ? 60 : range === '3M' ? 150 : range === '6M' ? 300 : range === '1Y' ? 500 : 2500
+      const chartRes = await yf.chart(symbolWithNs, {
+        period1: new Date(Date.now() - days * 86400000),
+        interval: '1d'
+      })
+      if (chartRes && chartRes.quotes) {
+        for (const q of chartRes.quotes) {
+          if (q && q.close !== null && q.close !== undefined) {
+            const dateStr = q.date instanceof Date 
+              ? q.date.toISOString().split('T')[0] 
+              : String(q.date).split('T')[0]
+            allCandles.push({
+              date: dateStr!,
+              open: Number(q.open ?? q.close),
+              high: Number(q.high ?? q.close),
+              low: Number(q.low ?? q.close),
+              close: Number(q.close),
+              volume: Number(q.volume ?? 0)
+            })
+          }
+        }
+      }
+    } catch (yfErr) {
+      console.warn(`[Candles API] Fallback chart fetch failed for ${symbolWithNs}:`, yfErr)
+    }
+  }
 
   // Synchronize latest trading session from live Yahoo Finance quote
   try {

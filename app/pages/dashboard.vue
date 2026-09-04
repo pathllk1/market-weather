@@ -84,14 +84,14 @@ function formatDate(ts?: number) {
             {{ session?.deviceName || 'Current Device' }}
           </div>
           <div class="text-xs text-muted font-mono">
-            IP: {{ session?.ipAddress || '127.0.0.1' }}
+            IP: {{ session?.ipAddress || 'Active Connection' }}
           </div>
         </div>
 
         <div class="p-3 border border-default rounded-md space-y-1">
           <span class="text-xs text-muted">Session Validity</span>
           <div class="font-semibold text-sm">
-            30 Days (Continuous Sliding)
+            {{ session?.expiresAt ? `${Math.max(1, Math.round((session.expiresAt - Date.now()) / (1000 * 60 * 60 * 24)))} Days Remaining` : 'Active Session' }}
           </div>
           <div class="text-xs text-muted">
             Expires: {{ formatDate(session?.expiresAt) }}

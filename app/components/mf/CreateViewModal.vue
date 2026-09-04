@@ -182,7 +182,7 @@ async function handleSave() {
         <!-- Search & Add Schemes -->
         <div class="space-y-2">
           <label class="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-            Add Schemes to this View (45,000+ available)
+            Add Schemes to this View (Live AMFI Catalog)
           </label>
           <div class="relative">
             <UInput

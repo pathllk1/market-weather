@@ -11,8 +11,8 @@ definePageMeta({
   layout: 'default'
 })
 
-// Navigation mode: 'views' (Preferred OHLCV Views) | 'screener' (Full Market Matrix)
-const activeTab = ref<'views' | 'screener'>('views')
+// Navigation mode: 'live' (Live NSE & Charts) | 'views' (Preferred OHLCV Views) | 'screener' (Full Market Matrix)
+const activeTab = ref<'live' | 'views' | 'screener'>('live')
 
 // --- Screener State ---
 const searchQuery = ref('')
@@ -71,7 +71,6 @@ const quickSearchSuggestions = ref<SearchEquityResult[]>([])
 const isQuickSearching = ref(false)
 const showQuickSearchDropdown = ref(false)
 const activeSuggestionIndex = ref(-1)
-const allAvailableSymbols = ref<{ symbol: string, company_name: string }[]>([])
 const viewDisplayMode = ref<'table' | 'cards'>('table')
 const hasUserManuallyToggledViewMode = ref(false)
 
@@ -119,14 +118,6 @@ async function loadScreener() {
     stocks.value = res.stocks || []
     pagination.value = res.pagination || { total: 0, page: 1, limit: 20, totalPages: 1 }
     summary.value = res.summary || summary.value
-
-    // Cache symbols list for quick add selector
-    if (allAvailableSymbols.value.length === 0 && res.stocks) {
-      allAvailableSymbols.value = res.stocks.map(s => ({
-        symbol: s.symbol,
-        company_name: s.company_name
-      }))
-    }
   } catch (err) {
     console.error('Failed to load market screener data:', err)
   } finally {
@@ -499,7 +490,7 @@ onUnmounted(() => {
           <span>Market Intelligence</span>
           <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
             <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            {{ summary.totalStocks || '494' }} Equities Live
+            {{ summary.totalStocks ? `${summary.totalStocks} Equities Live` : (isLoading ? 'Loading Equities...' : 'Equities Live') }}
           </span>
         </h1>
       </div>
@@ -532,10 +523,27 @@ onUnmounted(() => {
 
     <!-- Mode Switcher Navigation Tabs -->
     <div class="flex items-center justify-between border-b border-default/60 pb-3">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
         <button
           type="button"
-          class="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all"
+          class="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all shrink-0 select-none"
+          :class="activeTab === 'live' ? 'bg-primary text-white shadow-md' : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'"
+          @click="activeTab = 'live'"
+        >
+          <UIcon
+            name="i-lucide-activity"
+            class="h-4 w-4"
+          />
+          <span>Live NSE & Charts</span>
+          <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-1.5 py-0.2 text-[9px] font-bold text-emerald-400">
+            <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Live
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all shrink-0 select-none"
           :class="activeTab === 'views' ? 'bg-primary text-white shadow-md' : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'"
           @click="activeTab = 'views'"
         >
@@ -566,7 +574,8 @@ onUnmounted(() => {
             class="h-4 w-4"
           />
           <span>Market Screener</span>
-          <span class="text-[10px] font-normal opacity-80">(All 494 Equities)</span>
+          <span v-if="summary.totalStocks" class="text-[10px] font-normal opacity-80">({{ summary.totalStocks }} Equities)</span>
+          <span v-else class="text-[10px] font-normal opacity-80">(All Equities)</span>
         </button>
       </div>
 
@@ -586,9 +595,17 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- TAB 1: PREFERRED VIEWS (OHLCV) WITH LEFT SIDEBAR -->
+    <!-- TAB 1: LIVE NSE BENCHMARKS & INTRADAY CHARTS (DEFAULT) -->
+    <div v-if="activeTab === 'live'" class="w-full">
+      <MarketLiveMarketPulseTab
+        @inspect="openDetail"
+        @open-screener="activeTab = 'screener'"
+      />
+    </div>
+
+    <!-- TAB 2: PREFERRED VIEWS (OHLCV) WITH LEFT SIDEBAR -->
     <div
-      v-if="activeTab === 'views'"
+      v-else-if="activeTab === 'views'"
       class="flex flex-col lg:flex-row items-start gap-6 w-full"
     >
       <!-- Left Panel: View Sidebar -->
@@ -664,7 +681,7 @@ onUnmounted(() => {
                         name="i-lucide-loader-2"
                         class="mr-2 h-4 w-4 animate-spin text-primary"
                       />
-                      <span>Searching 494 Indian equities...</span>
+                      <span>Searching {{ summary.totalStocks ? `${summary.totalStocks} ` : '' }}Indian equities...</span>
                     </div>
 
                     <div
@@ -1246,7 +1263,6 @@ onUnmounted(() => {
     <MarketCreateViewModal
       v-model="isViewModalOpen"
       :view-to-edit="viewBeingEdited"
-      :available-symbols="allAvailableSymbols"
       @saved="handleViewSaved"
     />
 

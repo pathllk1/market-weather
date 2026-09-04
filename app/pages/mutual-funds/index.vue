@@ -271,7 +271,7 @@ onMounted(() => {
               ⚡ 100% Free Live AMFI Feed (MFAPI.in)
             </UBadge>
             <UBadge color="neutral" variant="subtle" size="sm">
-              45,000+ Schemes Tracked
+              Live AMFI Catalog Tracked
             </UBadge>
           </div>
           <h1 class="text-xl sm:text-2xl font-black text-neutral-900 dark:text-white tracking-tight flex items-center gap-2">

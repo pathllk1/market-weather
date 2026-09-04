@@ -34,7 +34,7 @@ const navItems = computed(() => {
     {
       to: '/mutual-funds',
       label: 'Mutual Funds Intelligence',
-      description: '45,000+ AMFI schemes, user views & SIPs',
+      description: 'Live AMFI schemes, user views & SIPs',
       icon: 'i-lucide-pie-chart'
     },
     {

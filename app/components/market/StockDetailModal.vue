@@ -32,6 +32,7 @@ watch(() => props.symbol, (newSymbol) => {
 })
 
 const isLoading = ref(false)
+const errorMessage = ref<string | null>(null)
 const stockData = ref<StockDetailResponse | null>(null)
 const activeTab = ref('chart')
 
@@ -45,12 +46,16 @@ async function loadStockDetails() {
   if (!props.symbol) return
   try {
     isLoading.value = true
+    errorMessage.value = null
     const res = await $fetch<StockDetailResponse>(`/api/market/stock`, {
       query: { symbol: props.symbol }
     })
     stockData.value = res
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('Failed to load stock details:', err)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fetchErr = err as any
+    errorMessage.value = fetchErr?.data?.statusMessage || fetchErr?.message || 'Failed to load stock details'
   } finally {
     isLoading.value = false
   }
@@ -85,8 +90,11 @@ function handleTradeClick(type: 'BUY' | 'SELL' = 'BUY') {
         <div>
           <div class="flex items-center gap-2">
             <h3 class="text-lg font-bold">
-              {{ stockData.symbol }}
+              {{ stockData.symbol.replace(/\.(NS|BO)$/i, '') }}
             </h3>
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400">
+              NSE: EQ
+            </span>
             <UBadge
               :color="getScoreColor(stockData.overallScore)"
               variant="subtle"
@@ -156,7 +164,29 @@ function handleTradeClick(type: 'BUY' | 'SELL' = 'BUY') {
             name="i-lucide-loader-2"
             class="animate-spin text-primary"
           />
-          <span class="text-sm font-semibold">Loading stock intelligence...</span>
+          <span class="text-sm font-semibold">Loading stock intelligence for {{ props.symbol }}...</span>
+        </div>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-x"
+          size="sm"
+          class="cursor-pointer -mr-2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+          aria-label="Close"
+          @click="isOpen = false"
+        />
+      </div>
+      <div
+        v-else
+        class="flex items-center justify-between w-full pr-6"
+      >
+        <div class="flex items-center gap-2">
+          <h3 class="text-lg font-bold">
+            {{ props.symbol }}
+          </h3>
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400">
+            NSE
+          </span>
         </div>
         <UButton
           color="neutral"
@@ -173,12 +203,36 @@ function handleTradeClick(type: 'BUY' | 'SELL' = 'BUY') {
     <template #body>
       <div
         v-if="isLoading && !stockData"
-        class="flex justify-center items-center py-16"
+        class="flex justify-center items-center py-20"
       >
         <UIcon
           name="i-lucide-loader-2"
           class="animate-spin text-3xl text-primary"
         />
+      </div>
+
+      <div
+        v-else-if="errorMessage && !stockData"
+        class="flex flex-col items-center justify-center py-16 px-4 text-center space-y-3"
+      >
+        <div class="p-3 rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-500">
+          <UIcon name="i-lucide-alert-triangle" class="w-8 h-8" />
+        </div>
+        <div>
+          <h4 class="text-base font-bold text-neutral-900 dark:text-neutral-100">
+            Stock Data Unavailable
+          </h4>
+          <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1 max-w-sm">
+            {{ errorMessage }}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+          @click="loadStockDetails"
+        >
+          Retry Fetch
+        </button>
       </div>
 
       <div
