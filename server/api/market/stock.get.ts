@@ -1,5 +1,5 @@
 import { getTursoClient } from '../../utils/turso'
-import { getLiveQuotes, toYahooTicker } from '../../utils/yahoo'
+import { getLiveQuotes, toYahooTicker, fetchDirectYahooQuote } from '../../utils/yahoo'
 import YahooFinance from 'yahoo-finance2'
 
 const yf = new YahooFinance({
@@ -167,19 +167,18 @@ export default defineEventHandler(async (event) => {
   // Fallback: If not in local Turso database, synthesize from Yahoo Finance
   try {
     const ticker = toYahooTicker(rawSymbol)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const yfQuote: any = await yf.quote(ticker)
+    const yfQuote = await fetchDirectYahooQuote(ticker)
     if (!yfQuote) {
       throw new Error(`Symbol '${ticker}' not found on Yahoo Finance`)
     }
 
-    const price = Number(yfQuote.regularMarketPrice ?? yfQuote.currentPrice ?? 0)
-    const prevClose = Number(yfQuote.regularMarketPreviousClose ?? price)
-    const pChange = Number(yfQuote.regularMarketChange ?? (price - prevClose))
-    const pctChange = Number(yfQuote.regularMarketChangePercent ?? (prevClose ? (pChange / prevClose) * 100 : 0))
+    const price = Number(yfQuote.price ?? 0)
+    const prevClose = Number(yfQuote.previousClose ?? price)
+    const pChange = Number(yfQuote.change ?? (price - prevClose))
+    const pctChange = Number(yfQuote.changePercent ?? (prevClose ? (pChange / prevClose) * 100 : 0))
     const high52 = Number(yfQuote.fiftyTwoWeekHigh ?? price)
     const low52 = Number(yfQuote.fiftyTwoWeekLow ?? price)
-    const avgVol = Number(yfQuote.averageDailyVolume3Month ?? yfQuote.regularMarketVolume ?? 0)
+    const avgVol = Number(yfQuote.volume ?? 0)
     const compName = String(yfQuote.longName || yfQuote.shortName || symbolWithoutNs)
 
     // Attempt to compute simple indicators from 60 days of historical data

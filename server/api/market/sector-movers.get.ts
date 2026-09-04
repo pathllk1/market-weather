@@ -154,9 +154,7 @@ const SECTOR_CONFIG = [
   }
 ]
 
-const yf = new YahooFinance({
-  suppressNotices: ['yahooSurvey']
-})
+import { fetchDirectYahooQuote, getLiveQuotes } from '../../utils/yahoo'
 
 interface CacheEntry {
   data: {
@@ -180,34 +178,32 @@ export default defineEventHandler(async (): Promise<SectorMoversApiResponse> => 
   }
 
   try {
-    const allSymbols = SECTOR_CONFIG.flatMap((s) => [s.indexSymbol, ...s.stocks.map((stk) => stk.symbol)])
-    // Fetch all quotes in a single batch call from Yahoo Finance (0 DB involvement)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const quotes = (await yf.quote(allSymbols)) as Record<string, any>[]
-    const quoteMap = new Map(quotes.map((q) => [q.symbol, q]))
+    const stockSymbols = SECTOR_CONFIG.flatMap((s) => s.stocks.map((stk) => stk.symbol))
+    const indexSymbols = SECTOR_CONFIG.map((s) => s.indexSymbol)
+
+    // 1. Fetch live constituent quotes (crumb-free direct v8 with Turso DB fallback)
+    // 2. Fetch sector index quotes in parallel
+    const [liveQuotes, indexQuotesList] = await Promise.all([
+      getLiveQuotes(stockSymbols),
+      Promise.all(indexSymbols.map((sym) => fetchDirectYahooQuote(sym)))
+    ])
+
+    const indexMap = new Map(
+      indexQuotesList.filter((q): q is NonNullable<typeof q> => q !== null).map((q) => [q.symbol, q])
+    )
 
     const sectors: SectorMoversItem[] = SECTOR_CONFIG.map((cfg) => {
-      const idxQuote = quoteMap.get(cfg.indexSymbol)
-      const idxPrice = Number(Number(idxQuote?.regularMarketPrice ?? 0).toFixed(2))
-      const idxPrev = Number(Number(idxQuote?.regularMarketPreviousClose ?? idxPrice).toFixed(2))
-      const idxChg = Number(Number(idxQuote?.regularMarketChange ?? (idxPrice - idxPrev)).toFixed(2))
-      const idxPct = Number(
-        Number(
-          idxQuote?.regularMarketChangePercent ?? (idxPrev ? (idxChg / idxPrev) * 100 : 0)
-        ).toFixed(2)
-      )
+      const idxQuote = indexMap.get(cfg.indexSymbol)
 
       const stockItems: SectorStockItem[] = cfg.stocks.map((stk) => {
-        const q = quoteMap.get(stk.symbol)
-        const price = Number(Number(q?.regularMarketPrice ?? 0).toFixed(2))
-        const prev = Number(Number(q?.regularMarketPreviousClose ?? price).toFixed(2))
-        const change = Number(Number(q?.regularMarketChange ?? (price - prev)).toFixed(2))
-        const changePercent = Number(
-          Number(q?.regularMarketChangePercent ?? (prev ? (change / prev) * 100 : 0)).toFixed(2)
-        )
+        const cleanSym = stk.symbol.replace(/\.(NS|BO)$/i, '')
+        const q = liveQuotes[stk.symbol] || liveQuotes[cleanSym]
+        const price = Number(Number(q?.price ?? 0).toFixed(2))
+        const change = Number(Number(q?.change ?? 0).toFixed(2))
+        const changePercent = Number(Number(q?.changePercent ?? 0).toFixed(2))
 
         return {
-          symbol: stk.symbol.replace('.NS', ''),
+          symbol: cleanSym,
           name: stk.name,
           price,
           change,
@@ -217,6 +213,15 @@ export default defineEventHandler(async (): Promise<SectorMoversApiResponse> => 
 
       // Sort top 5 stocks by performance
       stockItems.sort((a, b) => b.changePercent - a.changePercent)
+
+      // If index quote is available use it, otherwise synthesize from average stock movement
+      const avgStockPct = stockItems.length > 0
+        ? Number((stockItems.reduce((acc, s) => acc + s.changePercent, 0) / stockItems.length).toFixed(2))
+        : 0
+
+      const idxPrice = Number(Number(idxQuote?.price ?? 0).toFixed(2))
+      const idxChg = Number(Number(idxQuote?.change ?? 0).toFixed(2))
+      const idxPct = Number(Number(idxQuote?.changePercent ?? avgStockPct).toFixed(2))
 
       return {
         id: cfg.id,
@@ -285,7 +290,7 @@ export default defineEventHandler(async (): Promise<SectorMoversApiResponse> => 
     }
     throw createError({
       statusCode: 500,
-      statusMessage: 'Failed to fetch live sector movers'
+      statusMessage: `Failed to fetch live sector movers: ${(err as Error).message}`
     })
   }
 })

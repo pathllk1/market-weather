@@ -1,4 +1,5 @@
 import YahooFinance from 'yahoo-finance2'
+import { getTursoClient } from './turso'
 
 export interface LiveQuote {
   symbol: string
@@ -36,16 +37,89 @@ export function toYahooTicker(symbol: string): string {
   return `${clean}.NS`
 }
 
+export interface DirectYahooQuote {
+  symbol: string
+  price: number
+  change: number
+  changePercent: number
+  open: number
+  dayHigh: number
+  dayLow: number
+  previousClose: number
+  volume: number
+  fiftyTwoWeekHigh: number
+  fiftyTwoWeekLow: number
+  shortName: string
+  longName?: string
+  marketState: string
+}
+
 /**
- * Fetches real-time / delayed quotes for a list of NSE equity symbols.
- * Employs a 30-second cache (with 5-second minimum clamp on forced refresh) and handles per-symbol failures gracefully.
+ * Direct crumb-free quote fetcher using Yahoo Finance v8 chart metadata.
+ * Completely immune to Yahoo crumb rate limiting / 429 Too Many Requests in cloud environments (Render, AWS, etc.).
+ */
+export async function fetchDirectYahooQuote(symbol: string): Promise<DirectYahooQuote | null> {
+  const hosts = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com']
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'application/json'
+  }
+
+  for (const host of hosts) {
+    try {
+      const url = `${host}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 6000)
+
+      const res = await fetch(url, { headers, signal: controller.signal })
+      clearTimeout(timeoutId)
+
+      if (!res.ok) continue
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any
+      const meta = data?.chart?.result?.[0]?.meta
+      if (!meta || meta.regularMarketPrice === undefined) continue
+
+      const price = Number(meta.regularMarketPrice ?? 0)
+      const previousClose = Number(meta.previousClose ?? meta.chartPreviousClose ?? price)
+      const change = Number((price - previousClose).toFixed(2))
+      const changePercent = Number((previousClose ? (change / previousClose) * 100 : 0).toFixed(2))
+
+      return {
+        symbol,
+        price,
+        change,
+        changePercent,
+        open: Number(meta.regularMarketOpen ?? meta.chartPreviousClose ?? price),
+        dayHigh: Number(meta.regularMarketDayHigh ?? price),
+        dayLow: Number(meta.regularMarketDayLow ?? price),
+        previousClose,
+        volume: Number(meta.regularMarketVolume ?? 0),
+        fiftyTwoWeekHigh: Number(meta.fiftyTwoWeekHigh ?? price),
+        fiftyTwoWeekLow: Number(meta.fiftyTwoWeekLow ?? price),
+        shortName: String(meta.shortName || symbol),
+        longName: meta.longName ? String(meta.longName) : undefined,
+        marketState: String(meta.marketState || 'REGULAR')
+      }
+    } catch {
+      // Continue to backup host
+    }
+  }
+
+  return null
+}
+
+/**
+ * Fetches real-time quotes for a list of NSE equity symbols.
+ * Employs crumb-free Yahoo v8 metadata fetcher with 30s cache and automatic Turso DB fallback.
  */
 export async function getLiveQuotes(symbols: string[], forceRefresh = false): Promise<Record<string, LiveQuote>> {
   const results: Record<string, LiveQuote> = {}
   const now = Date.now()
   const symbolsToFetch: string[] = []
 
-  // 1. Check cache first (forced refresh requires at least 5s age to prevent rapid spam clicking)
+  // 1. Check in-memory cache first
   for (const rawSymbol of symbols) {
     const symbol = rawSymbol.trim().toUpperCase()
     const cached = quoteCache.get(symbol)
@@ -61,34 +135,26 @@ export async function getLiveQuotes(symbols: string[], forceRefresh = false): Pr
     return results
   }
 
-  // 2. Fetch fresh quotes in parallel with error isolation per symbol
+  // 2. Fetch fresh quotes using crumb-free direct Yahoo endpoint
+  const failedSymbols: string[] = []
+
   await Promise.all(
     symbolsToFetch.map(async (symbol) => {
       try {
         const ticker = toYahooTicker(symbol)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const q = (await yf.quote(ticker)) as Record<string, any>
+        const q = await fetchDirectYahooQuote(ticker)
 
-        if (q && (q.regularMarketPrice !== undefined || q.currentPrice !== undefined)) {
-          const price = Number(q.regularMarketPrice ?? q.currentPrice ?? 0)
-          const previousClose = Number(q.regularMarketPreviousClose ?? price)
-          const change = Number(q.regularMarketChange ?? (price - previousClose))
-          const changePercent = Number(q.regularMarketChangePercent ?? (previousClose ? (change / previousClose) * 100 : 0))
-          const open = Number(q.regularMarketOpen ?? price)
-          const dayHigh = Number(q.regularMarketDayHigh ?? price)
-          const dayLow = Number(q.regularMarketDayLow ?? price)
-          const volume = Number(q.regularMarketVolume ?? 0)
-
+        if (q && q.price > 0) {
           const liveQuote: LiveQuote = {
             symbol,
-            price,
-            change,
-            changePercent,
-            open,
-            dayHigh,
-            dayLow,
-            previousClose,
-            volume,
+            price: q.price,
+            change: q.change,
+            changePercent: q.changePercent,
+            open: q.open,
+            dayHigh: q.dayHigh,
+            dayLow: q.dayLow,
+            previousClose: q.previousClose,
+            volume: q.volume,
             lastUpdated: now
           }
 
@@ -100,17 +166,59 @@ export async function getLiveQuotes(symbols: string[], forceRefresh = false): Pr
           if (ticker !== symbol) {
             results[ticker] = liveQuote
           }
+        } else {
+          // If network fetch fails, check previous cache or queue for DB fallback
+          const fallback = quoteCache.get(symbol) || quoteCache.get(ticker)
+          if (fallback?.quote) {
+            results[symbol] = fallback.quote
+          } else {
+            failedSymbols.push(symbol)
+          }
         }
       } catch (err) {
-        // If an individual quote fetch fails temporarily, fallback to previously cached quote if available
-        const fallback = quoteCache.get(symbol)
-        if (fallback?.quote) {
-          results[symbol] = fallback.quote
-        }
-        console.warn(`[YahooFinance] Failed to fetch quote for ${symbol}:`, (err as Error).message)
+        failedSymbols.push(symbol)
+        console.warn(`[getLiveQuotes] Failed for ${symbol}:`, (err as Error).message)
       }
     })
   )
+
+  // 3. Fallback to Turso DB for any symbols that failed external fetch (100% resilient)
+  if (failedSymbols.length > 0) {
+    try {
+      const { getTursoClient } = await import('./turso')
+      const db = getTursoClient()
+      const symbolsWithNs = failedSymbols.map(toYahooTicker)
+      const allSearch = [...new Set([...failedSymbols, ...symbolsWithNs])]
+      const placeholders = allSearch.map(() => '?').join(',')
+      const dbRes = await db.execute({
+        sql: `SELECT symbol, company_name, current_price, price_change, percentage_change FROM technical_analysis WHERE symbol IN (${placeholders})`,
+        args: allSearch
+      })
+
+      for (const row of dbRes.rows) {
+        const sym = String(row.symbol)
+        const clean = sym.replace(/\.(NS|BO)$/i, '')
+        const liveQuote: LiveQuote = {
+          symbol: clean,
+          price: Number(row.current_price || 0),
+          change: Number(row.price_change || 0),
+          changePercent: Number(row.percentage_change || 0),
+          open: Number(row.current_price || 0),
+          dayHigh: Number(row.current_price || 0),
+          dayLow: Number(row.current_price || 0),
+          previousClose: Number(row.current_price || 0),
+          volume: 0,
+          lastUpdated: now
+        }
+        results[clean] = liveQuote
+        results[sym] = liveQuote
+        quoteCache.set(clean, { quote: liveQuote, timestamp: now })
+        quoteCache.set(sym, { quote: liveQuote, timestamp: now })
+      }
+    } catch (dbErr) {
+      console.warn('[getLiveQuotes] Turso DB fallback error:', dbErr)
+    }
+  }
 
   return results
 }

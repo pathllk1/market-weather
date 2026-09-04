@@ -1,5 +1,5 @@
 import YahooFinance from 'yahoo-finance2'
-import { toYahooTicker } from '../../utils/yahoo'
+import { toYahooTicker, fetchDirectYahooQuote } from '../../utils/yahoo'
 
 export interface LiveChartCandle {
   time: number // UNIX epoch seconds
@@ -102,13 +102,12 @@ export default defineEventHandler(async (event): Promise<LiveChartResponse> => {
 
   try {
     // Query chart and real-time quote in parallel (both fast, 0 DB involvement)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [chartRes, quoteRes] = await Promise.all([
       yf.chart(ticker, {
         interval: interval as any,
         period1
       }) as Promise<Record<string, any>>,
-      yf.quote(ticker).catch(() => null) as Promise<Record<string, any> | null>
+      fetchDirectYahooQuote(ticker).catch(() => null)
     ])
 
     if (!chartRes || !Array.isArray(chartRes.quotes)) {
@@ -215,20 +214,20 @@ export default defineEventHandler(async (event): Promise<LiveChartResponse> => {
     const lastCandle = candles[candles.length - 1]
 
     // Crucial: Use live quote stats for day change so it's NEVER corrupted by historical range
-    const currentPrice = quoteRes?.regularMarketPrice !== undefined
-      ? Number(Number(quoteRes.regularMarketPrice).toFixed(2))
+    const currentPrice = quoteRes?.price !== undefined
+      ? Number(Number(quoteRes.price).toFixed(2))
       : (lastCandle ? lastCandle.close : Number(metaObj.regularMarketPrice ?? 0))
 
-    const prevClose = quoteRes?.regularMarketPreviousClose !== undefined
-      ? Number(Number(quoteRes.regularMarketPreviousClose).toFixed(2))
+    const prevClose = quoteRes?.previousClose !== undefined
+      ? Number(Number(quoteRes.previousClose).toFixed(2))
       : Number(metaObj.regularMarketPreviousClose ?? (candles[0]?.open || currentPrice))
 
-    const change = quoteRes?.regularMarketChange !== undefined
-      ? Number(Number(quoteRes.regularMarketChange).toFixed(2))
+    const change = quoteRes?.change !== undefined
+      ? Number(Number(quoteRes.change).toFixed(2))
       : Number((currentPrice - prevClose).toFixed(2))
 
-    const changePercent = quoteRes?.regularMarketChangePercent !== undefined
-      ? Number(Number(quoteRes.regularMarketChangePercent).toFixed(2))
+    const changePercent = quoteRes?.changePercent !== undefined
+      ? Number(Number(quoteRes.changePercent).toFixed(2))
       : Number((prevClose ? (change / prevClose) * 100 : 0).toFixed(2))
 
     const response: LiveChartResponse = {
