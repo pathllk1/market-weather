@@ -66,6 +66,16 @@ const { user, isAuthenticated, isAdmin, logout } = useAuth()
             </UButton>
 
             <UButton
+              to="/backtest"
+              variant="ghost"
+              size="xs"
+              color="neutral"
+              icon="i-lucide-flask-conical"
+            >
+              Backtest
+            </UButton>
+
+            <UButton
               to="/weather"
               variant="ghost"
               size="xs"

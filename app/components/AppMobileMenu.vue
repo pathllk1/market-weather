@@ -44,6 +44,12 @@ const navItems = computed(() => {
       icon: 'i-lucide-briefcase'
     },
     {
+      to: '/backtest',
+      label: 'Backtest Workspace',
+      description: 'Simulate manual trades on live prices',
+      icon: 'i-lucide-flask-conical'
+    },
+    {
       to: '/weather',
       label: 'Weather & AQI',
       description: 'National air quality & 51-city matrix',
