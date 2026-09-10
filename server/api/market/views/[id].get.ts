@@ -82,10 +82,16 @@ export default defineEventHandler(async (event): Promise<MarketViewDetailRespons
   const liveQuotes = await getLiveQuotes(symbols, forceRefresh)
 
   // 4. Merge DB technical indicators with Yahoo real-time OHLCV
-  const equities: ViewEquityOhlcv[] = symbols.map((symbol) => {
+  const equities: ViewEquityOhlcv[] = []
+
+  for (const symbol of symbols) {
     const sym = symbol.toUpperCase()
     const dbData = dbMap.get(sym)
     const quote = liveQuotes[sym]
+
+    if (!quote && (!dbData || !dbData.current_price)) {
+      continue
+    }
 
     const companyName = dbData?.company_name ? String(dbData.company_name) : sym
     const overallScore = dbData?.overall_score ? Number(dbData.overall_score) : 50
@@ -95,7 +101,7 @@ export default defineEventHandler(async (event): Promise<MarketViewDetailRespons
 
     if (quote) {
       // Use real-time Yahoo Finance quote data
-      return {
+      equities.push({
         symbol: sym,
         companyName,
         price: quote.price,
@@ -107,38 +113,38 @@ export default defineEventHandler(async (event): Promise<MarketViewDetailRespons
         close: quote.previousClose,
         volume: quote.volume,
         overallScore,
-        rsi,
-        macdHist,
-        supertrendTrend,
+        ...(rsi !== undefined ? { rsi } : {}),
+        ...(macdHist !== undefined ? { macdHist } : {}),
+        ...(supertrendTrend ? { supertrendTrend } : {}),
         lastUpdated: quote.lastUpdated,
         isLive: true
-      }
-    }
+      })
+    } else if (dbData && dbData.current_price) {
+      // Use verified Turso DB historical data
+      const dbPrice = Number(dbData.current_price)
+      const dbChange = Number(dbData.price_change || 0)
+      const dbPercent = Number(dbData.percentage_change || 0)
 
-    // Graceful fallback to existing Turso DB historical data
-    const dbPrice = dbData?.current_price ? Number(dbData.current_price) : 0
-    const dbChange = dbData?.price_change ? Number(dbData.price_change) : 0
-    const dbPercent = dbData?.percentage_change ? Number(dbData.percentage_change) : 0
-
-    return {
-      symbol: sym,
-      companyName,
-      price: dbPrice,
-      change: dbChange,
-      changePercent: dbPercent,
-      open: dbPrice - dbChange,
-      high: dbPrice,
-      low: dbPrice - dbChange,
-      close: dbPrice - dbChange,
-      volume: 0,
-      overallScore,
-      rsi,
-      macdHist,
-      supertrendTrend,
-      lastUpdated: dbData?.last_updated ? String(dbData.last_updated) : Date.now(),
-      isLive: false
+      equities.push({
+        symbol: sym,
+        companyName,
+        price: dbPrice,
+        change: dbChange,
+        changePercent: dbPercent,
+        open: dbPrice - dbChange,
+        high: dbPrice,
+        low: dbPrice - dbChange,
+        close: dbPrice - dbChange,
+        volume: 0,
+        overallScore,
+        ...(rsi !== undefined ? { rsi } : {}),
+        ...(macdHist !== undefined ? { macdHist } : {}),
+        ...(supertrendTrend ? { supertrendTrend } : {}),
+        lastUpdated: dbData.last_updated ? String(dbData.last_updated) : Date.now(),
+        isLive: false
+      })
     }
-  })
+  }
 
   return { view, equities }
 })

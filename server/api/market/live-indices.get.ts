@@ -35,11 +35,11 @@ export interface LiveIndicesApiResponse {
 }
 
 const INDICES_CONFIG = [
-  { symbol: '^NSEI', displayName: 'NIFTY 50', shortName: 'NIFTY', fallbackPrice: 23897.70, fallbackPrev: 23914.40 },
-  { symbol: '^NSEBANK', displayName: 'BANK NIFTY', shortName: 'BANKNIFTY', fallbackPrice: 57369.65, fallbackPrev: 57172.00 },
-  { symbol: '^CNXIT', displayName: 'NIFTY IT', shortName: 'NIFTY IT', fallbackPrice: 30695.10, fallbackPrev: 31102.90 },
-  { symbol: '^INDIAVIX', displayName: 'INDIA VIX', shortName: 'VIX', fallbackPrice: 10.68, fallbackPrev: 11.59 },
-  { symbol: '^BSESN', displayName: 'S&P BSE SENSEX', shortName: 'SENSEX', fallbackPrice: 76515.43, fallbackPrev: 76570.40 }
+  { symbol: '^NSEI', displayName: 'NIFTY 50', shortName: 'NIFTY' },
+  { symbol: '^NSEBANK', displayName: 'BANK NIFTY', shortName: 'BANKNIFTY' },
+  { symbol: '^CNXIT', displayName: 'NIFTY IT', shortName: 'NIFTY IT' },
+  { symbol: '^INDIAVIX', displayName: 'INDIA VIX', shortName: 'VIX' },
+  { symbol: '^BSESN', displayName: 'S&P BSE SENSEX', shortName: 'SENSEX' }
 ]
 
 const NIFTY_MOVERS_UNIVERSE = [
@@ -100,31 +100,11 @@ export default defineEventHandler(async (): Promise<LiveIndicesApiResponse> => {
           console.warn(`[live-indices] Direct fetch failed for ${cfg.symbol}:`, (err as Error).message)
         }
 
-        // Fallback to existing cached item or baseline defaults
+        // Return prior real cached index if available; never fabricate fake fallback numbers
         const cachedItem = cache?.data.indices.find(i => i.symbol === cfg.symbol)
         if (cachedItem) return cachedItem
 
-        const price = cfg.fallbackPrice
-        const prev = cfg.fallbackPrev
-        const change = Number((price - prev).toFixed(2))
-        const changePercent = Number(((change / prev) * 100).toFixed(2))
-
-        return {
-          symbol: cfg.symbol,
-          name: cfg.displayName,
-          shortName: cfg.shortName,
-          price,
-          change,
-          changePercent,
-          dayHigh: price,
-          dayLow: price,
-          open: prev,
-          previousClose: prev,
-          fiftyTwoWeekHigh: price * 1.1,
-          fiftyTwoWeekLow: price * 0.85,
-          marketState: 'REGULAR',
-          lastUpdated: now
-        } as LiveIndexData
+        return null
       })
     )
 

@@ -1,5 +1,4 @@
 import YahooFinance from 'yahoo-finance2'
-import { getTursoClient } from './turso'
 
 export interface LiveQuote {
   symbol: string
@@ -82,16 +81,37 @@ export async function fetchDirectYahooQuote(symbol: string): Promise<DirectYahoo
       if (!meta || meta.regularMarketPrice === undefined) continue
 
       const price = Number(meta.regularMarketPrice ?? 0)
-      const previousClose = Number(meta.previousClose ?? meta.chartPreviousClose ?? price)
-      const change = Number((price - previousClose).toFixed(2))
-      const changePercent = Number((previousClose ? (change / previousClose) * 100 : 0).toFixed(2))
+
+      // Yahoo provides explicit day change in meta (regularMarketChange / fulldayChange).
+      // DO NOT rely on meta.chartPreviousClose alone because for Indian indices Yahoo often returns
+      // an unadjusted multi-day baseline rather than yesterday's official market close!
+      const rawChange = meta.regularMarketChange ?? meta.fulldayChange
+      const rawChangePercent = meta.regularMarketChangePercent ?? meta.fulldayChangePercent
+
+      let change: number
+      let changePercent: number
+      let previousClose: number
+
+      if (rawChange !== undefined && rawChange !== null && !isNaN(Number(rawChange))) {
+        change = Number(Number(rawChange).toFixed(2))
+        previousClose = meta.previousClose !== undefined && meta.previousClose !== null
+          ? Number(Number(meta.previousClose).toFixed(2))
+          : Number((price - change).toFixed(2))
+        changePercent = rawChangePercent !== undefined && rawChangePercent !== null
+          ? Number(Number(rawChangePercent).toFixed(2))
+          : Number((previousClose > 0 ? (change / previousClose) * 100 : 0).toFixed(2))
+      } else {
+        previousClose = Number(meta.previousClose ?? meta.chartPreviousClose ?? price)
+        change = Number((price - previousClose).toFixed(2))
+        changePercent = Number((previousClose ? (change / previousClose) * 100 : 0).toFixed(2))
+      }
 
       return {
         symbol,
         price,
         change,
         changePercent,
-        open: Number(meta.regularMarketOpen ?? meta.chartPreviousClose ?? price),
+        open: Number(meta.regularMarketOpen ?? (previousClose || price)),
         dayHigh: Number(meta.regularMarketDayHigh ?? price),
         dayLow: Number(meta.regularMarketDayLow ?? price),
         previousClose,
@@ -259,7 +279,6 @@ export async function getStockFundamentals(symbol: string): Promise<import('~/ty
   const ticker = toYahooTicker(cleanSymbol)
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = (await yf.quoteSummary(ticker, {
       modules: [
         'quoteType',
@@ -272,6 +291,7 @@ export async function getStockFundamentals(symbol: string): Promise<import('~/ty
         'recommendationTrend',
         'earnings'
       ]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as Record<string, any>
 
     if (!res) return null
@@ -285,7 +305,6 @@ export async function getStockFundamentals(symbol: string): Promise<import('~/ty
     const recTrend = res.recommendationTrend?.trend?.[0]
     const earnings = res.earnings?.financialsChart
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const companyOfficers = Array.isArray(profile.companyOfficers)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ? profile.companyOfficers.slice(0, 10).map((o: any) => ({
@@ -296,7 +315,6 @@ export async function getStockFundamentals(symbol: string): Promise<import('~/ty
         }))
       : []
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const yearlyEarnings = Array.isArray(earnings?.yearly)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ? earnings.yearly.map((y: any) => ({
@@ -307,7 +325,6 @@ export async function getStockFundamentals(symbol: string): Promise<import('~/ty
         }))
       : []
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const quarterlyEarnings = Array.isArray(earnings?.quarterly)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ? earnings.quarterly.map((q: any) => ({
@@ -390,13 +407,15 @@ export async function getStockFundamentals(symbol: string): Promise<import('~/ty
         recommendationKey: safeStr(financial.recommendationKey),
         recommendationMean: safeNum(financial.recommendationMean),
         numberOfAnalystOpinions: safeNum(financial.numberOfAnalystOpinions),
-        recommendationTrend: recTrend ? {
-          strongBuy: Number(recTrend.strongBuy || 0),
-          buy: Number(recTrend.buy || 0),
-          hold: Number(recTrend.hold || 0),
-          sell: Number(recTrend.sell || 0),
-          strongSell: Number(recTrend.strongSell || 0)
-        } : undefined
+        recommendationTrend: recTrend
+          ? {
+              strongBuy: Number(recTrend.strongBuy || 0),
+              buy: Number(recTrend.buy || 0),
+              hold: Number(recTrend.hold || 0),
+              sell: Number(recTrend.sell || 0),
+              strongSell: Number(recTrend.strongSell || 0)
+            }
+          : undefined
       },
       earningsTrend: yearlyEarnings,
       quarterlyEarnings
@@ -409,4 +428,3 @@ export async function getStockFundamentals(symbol: string): Promise<import('~/ty
     throw err
   }
 }
-

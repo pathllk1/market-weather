@@ -36,13 +36,15 @@ export default defineEventHandler(async (event) => {
       amcName = amcName || details.meta.fund_house
       category = category || details.meta.scheme_category
       if (nav <= 0 && details.data.length > 0) {
-        // Try to match date or fallback to latest
-        nav = Number(details.data[0]?.nav) || 10
+        // Try to match date or use latest
+        nav = Number(details.data[0]?.nav) || 0
       }
     }
   }
 
-  if (nav <= 0) nav = 10 // Fallback nominal NAV
+  if (nav <= 0) {
+    throw createError({ statusCode: 400, statusMessage: 'Unable to resolve real-time NAV for mutual fund scheme' })
+  }
 
   // Ensure strict mathematical integrity: units = amount / nav
   if (amount > 0 && nav > 0) {
