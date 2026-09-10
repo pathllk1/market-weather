@@ -13,6 +13,7 @@ export interface MFHoldingSummary {
   navDate: string
   oneDayChange: number
   oneDayChangePct: number
+  oneDayPnL: number
   totalInvested: number
   currentValue: number
   unrealizedPnL: number
@@ -95,6 +96,8 @@ export default defineEventHandler(async (event) => {
 
   let totalMFInvested = 0
   let totalMFCurrentValue = 0
+  let totalMFDayPnL = 0
+  let latestNavDate = ''
 
   const holdings: MFHoldingSummary[] = activeSchemes.map((s, idx) => {
     const navInfo = navResults[idx]
@@ -104,8 +107,17 @@ export default defineEventHandler(async (event) => {
     const pnl = Number((curVal - s.invested).toFixed(2))
     const pnlPct = s.invested > 0 ? Number(((pnl / s.invested) * 100).toFixed(2)) : 0
 
+    const oneDayChange = navInfo?.oneDayChange || 0
+    const oneDayChangePct = navInfo?.oneDayChangePct || 0
+    const oneDayPnL = Number((s.units * oneDayChange).toFixed(2))
+
     totalMFInvested += s.invested
     totalMFCurrentValue += curVal
+    totalMFDayPnL += oneDayPnL
+
+    if (navInfo?.navDate && (!latestNavDate || navInfo.navDate > latestNavDate)) {
+      latestNavDate = navInfo.navDate
+    }
 
     return {
       schemeCode: s.schemeCode,
@@ -117,8 +129,9 @@ export default defineEventHandler(async (event) => {
       currentNav: curNav,
       previousNav: prevNav,
       navDate: navInfo?.navDate || '',
-      oneDayChange: navInfo?.oneDayChange || 0,
-      oneDayChangePct: navInfo?.oneDayChangePct || 0,
+      oneDayChange,
+      oneDayChangePct,
+      oneDayPnL,
       totalInvested: Number(s.invested.toFixed(2)),
       currentValue: curVal,
       unrealizedPnL: pnl,
@@ -152,12 +165,18 @@ export default defineEventHandler(async (event) => {
   const totalMFPnL = Number((totalMFCurrentValue - totalMFInvested).toFixed(2))
   const totalMFReturnPct = totalMFInvested > 0 ? Number(((totalMFPnL / totalMFInvested) * 100).toFixed(2)) : 0
 
+  const prevTotalMFValuation = totalMFCurrentValue - totalMFDayPnL
+  const totalMFDayPnLPct = prevTotalMFValuation > 0 ? Number(((totalMFDayPnL / prevTotalMFValuation) * 100).toFixed(2)) : 0
+
   return {
     holdings,
     totalMFInvested: Number(totalMFInvested.toFixed(2)),
     totalMFCurrentValue: Number(totalMFCurrentValue.toFixed(2)),
     totalMFPnL,
     totalMFReturnPct,
+    totalMFDayPnL: Number(totalMFDayPnL.toFixed(2)),
+    totalMFDayPnLPct,
+    latestNavDate,
     categoryAllocation
   }
 })

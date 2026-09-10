@@ -405,17 +405,22 @@ function handleOpenLog() {
         <div class="flex items-start gap-3 shrink-0">
           <!-- Live NAV Card -->
           <div v-if="fundData" class="text-right">
-            <div class="text-xs text-neutral-400">Live AMFI NAV</div>
+            <div class="text-xs text-neutral-400">
+              Live AMFI NAV <span v-if="fundData.navDate" class="text-[10px]">({{ fundData.navDate }})</span>
+            </div>
             <div class="text-lg sm:text-xl font-mono font-bold text-neutral-900 dark:text-white">
               ₹{{ fundData.currentNav.toFixed(2) }}
             </div>
             <div
               v-if="fundData.oneDayChangePct !== 0"
-              class="text-xs font-semibold flex items-center justify-end gap-0.5"
+              class="text-xs font-semibold flex items-center justify-end gap-1 font-mono"
               :class="fundData.oneDayChangePct >= 0 ? 'text-emerald-500' : 'text-rose-500'"
             >
               <UIcon :name="fundData.oneDayChangePct >= 0 ? 'i-lucide-trending-up' : 'i-lucide-trending-down'" class="h-3 w-3" />
               <span>{{ fundData.oneDayChangePct >= 0 ? '+' : '' }}{{ fundData.oneDayChangePct.toFixed(2) }}%</span>
+              <span v-if="fundData.oneDayPnL" class="text-[10px]">
+                ({{ fundData.oneDayPnL >= 0 ? '+' : '' }}{{ fmtCur(fundData.oneDayPnL) }})
+              </span>
             </div>
           </div>
 
@@ -451,8 +456,8 @@ function handleOpenLog() {
 
       <!-- Main Content -->
       <div v-else-if="fundData" class="space-y-5">
-        <!-- 1. Key Performance Cards -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <!-- 1. Key Performance Cards (5-Metric Matrix) -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <!-- XIRR Card -->
           <div class="p-3.5 rounded-2xl bg-primary/5 dark:bg-primary/10 border border-primary/20 relative overflow-hidden">
             <div class="text-[11px] font-semibold text-primary uppercase tracking-wider flex items-center justify-between">
@@ -469,7 +474,7 @@ function handleOpenLog() {
               <span class="text-[11px] text-neutral-400">p.a.</span>
             </div>
             <p class="text-[10px] text-neutral-500 dark:text-neutral-400 mt-1">
-              Annualized return on cash flows
+              Annualized cash flow return
             </p>
           </div>
 
@@ -483,6 +488,25 @@ function handleOpenLog() {
             </div>
             <div class="text-[10px] text-neutral-400 mt-1">
               Cost: <span class="font-mono font-semibold">{{ fmtCur(fundData.totalInvested) }}</span>
+            </div>
+          </div>
+
+          <!-- Today's P&L (1D) Card -->
+          <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700/60">
+            <div class="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
+              Today's P&L (1D)
+            </div>
+            <div
+              class="text-xl font-bold font-mono mt-1"
+              :class="(fundData.oneDayPnL || 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'"
+            >
+              {{ (fundData.oneDayPnL || 0) >= 0 ? '+' : '' }}{{ fmtCur(fundData.oneDayPnL || 0) }}
+            </div>
+            <div
+              class="text-[10px] font-semibold mt-1"
+              :class="(fundData.oneDayChangePct || 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'"
+            >
+              {{ (fundData.oneDayChangePct || 0) >= 0 ? '+' : '' }}{{ (fundData.oneDayChangePct || 0).toFixed(2) }}% vs Prev
             </div>
           </div>
 

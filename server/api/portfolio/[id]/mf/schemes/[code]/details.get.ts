@@ -15,8 +15,10 @@ export interface SchemeDetailResponse {
   avgNav: number
   currentNav: number
   previousNav: number
+  navDate?: string
   oneDayChange: number
   oneDayChangePct: number
+  oneDayPnL: number
   totalInvested: number
   currentValue: number
   unrealizedPnL: number
@@ -147,6 +149,7 @@ export default defineEventHandler(async (event) => {
   const oneDayChange = navInfo?.oneDayChange || 0
   const oneDayChangePct = navInfo?.oneDayChangePct || 0
 
+  const oneDayPnL = Number((currentUnits * oneDayChange).toFixed(2))
   const currentValue = Number((currentUnits * curNav).toFixed(2))
   const avgNav = currentUnits > 0 ? Number((totalInvested / currentUnits).toFixed(4)) : 0
   const unrealizedPnL = Number((currentValue - totalInvested).toFixed(2))
@@ -204,8 +207,10 @@ export default defineEventHandler(async (event) => {
     avgNav,
     currentNav: curNav,
     previousNav: prevNav,
+    navDate: navInfo?.navDate || '',
     oneDayChange,
     oneDayChangePct,
+    oneDayPnL,
     totalInvested: Number(totalInvested.toFixed(2)),
     currentValue,
     unrealizedPnL,

@@ -78,16 +78,16 @@ function fmtCur(val: number) {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="w-full space-y-6">
     <!-- 1. MUTUAL FUNDS EXECUTIVE METRICS STRIP -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
       <!-- Total MF Valuation -->
-      <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5 space-y-1.5 shadow-xs">
+      <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 sm:p-5 space-y-1.5 shadow-xs">
         <div class="flex items-center justify-between text-neutral-400">
-          <span class="text-xs font-semibold uppercase tracking-wider">MF Portfolio Valuation</span>
+          <span class="text-xs font-semibold uppercase tracking-wider">MF Valuation</span>
           <UIcon name="i-lucide-wallet" class="h-4 w-4 text-primary" />
         </div>
-        <div class="text-2xl font-black font-mono text-neutral-900 dark:text-white">
+        <div class="text-xl sm:text-2xl font-black font-mono text-neutral-900 dark:text-white">
           {{ fmtCur(holdingsData?.totalMFCurrentValue || 0) }}
         </div>
         <div class="text-xs font-mono" :class="(holdingsData?.totalMFPnL || 0) >= 0 ? 'text-emerald-500 font-semibold' : 'text-rose-500 font-semibold'">
@@ -97,12 +97,12 @@ function fmtCur(val: number) {
       </div>
 
       <!-- Total Invested in MFs -->
-      <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5 space-y-1.5 shadow-xs">
+      <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 sm:p-5 space-y-1.5 shadow-xs">
         <div class="flex items-center justify-between text-neutral-400">
-          <span class="text-xs font-semibold uppercase tracking-wider">Total Capital Invested</span>
+          <span class="text-xs font-semibold uppercase tracking-wider">Capital Invested</span>
           <UIcon name="i-lucide-landmark" class="h-4 w-4 text-emerald-500" />
         </div>
-        <div class="text-2xl font-black font-mono text-neutral-900 dark:text-white">
+        <div class="text-xl sm:text-2xl font-black font-mono text-neutral-900 dark:text-white">
           {{ fmtCur(holdingsData?.totalMFInvested || 0) }}
         </div>
         <div class="text-xs text-neutral-400">
@@ -110,31 +110,49 @@ function fmtCur(val: number) {
         </div>
       </div>
 
-      <!-- Active Schemes Count -->
-      <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5 space-y-1.5 shadow-xs">
+      <!-- Today's P&L (1D) -->
+      <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 sm:p-5 space-y-1.5 shadow-xs">
         <div class="flex items-center justify-between text-neutral-400">
-          <span class="text-xs font-semibold uppercase tracking-wider">Active MF Schemes</span>
+          <span class="text-xs font-semibold uppercase tracking-wider">Today's P&L (1D)</span>
+          <UIcon name="i-lucide-calendar" class="h-4 w-4 text-primary" />
+        </div>
+        <div
+          class="text-xl sm:text-2xl font-black font-mono"
+          :class="(holdingsData?.totalMFDayPnL || 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'"
+        >
+          {{ (holdingsData?.totalMFDayPnL || 0) >= 0 ? '+' : '' }}{{ fmtCur(holdingsData?.totalMFDayPnL || 0) }}
+        </div>
+        <div class="text-xs font-mono font-semibold" :class="(holdingsData?.totalMFDayPnL || 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'">
+          <span>{{ (holdingsData?.totalMFDayPnLPct || 0) >= 0 ? '+' : '' }}{{ (holdingsData?.totalMFDayPnLPct || 0).toFixed(2) }}%</span>
+          <span class="text-neutral-400 font-normal ml-1">vs Prev NAV</span>
+        </div>
+      </div>
+
+      <!-- Active Schemes Count -->
+      <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 sm:p-5 space-y-1.5 shadow-xs">
+        <div class="flex items-center justify-between text-neutral-400">
+          <span class="text-xs font-semibold uppercase tracking-wider">Active Schemes</span>
           <UIcon name="i-lucide-layers" class="h-4 w-4 text-indigo-500" />
         </div>
-        <div class="text-2xl font-black font-mono text-neutral-900 dark:text-white">
+        <div class="text-xl sm:text-2xl font-black font-mono text-neutral-900 dark:text-white">
           {{ holdingsData?.holdings.length || 0 }}
         </div>
         <div class="text-xs text-neutral-400">
-          Across {{ categoryOptions.length - 1 }} Asset Categories
+          Across {{ categoryOptions.length - 1 }} Categories
         </div>
       </div>
 
       <!-- Overall Performance -->
-      <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5 space-y-1.5 shadow-xs">
+      <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 sm:p-5 space-y-1.5 shadow-xs">
         <div class="flex items-center justify-between text-neutral-400">
-          <span class="text-xs font-semibold uppercase tracking-wider">Average Fund Return</span>
+          <span class="text-xs font-semibold uppercase tracking-wider">Overall Return</span>
           <UIcon name="i-lucide-trending-up" class="h-4 w-4 text-emerald-500" />
         </div>
-        <div class="text-2xl font-black font-mono" :class="(holdingsData?.totalMFReturnPct || 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'">
+        <div class="text-xl sm:text-2xl font-black font-mono" :class="(holdingsData?.totalMFReturnPct || 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'">
           {{ (holdingsData?.totalMFReturnPct || 0) >= 0 ? '+' : '' }}{{ (holdingsData?.totalMFReturnPct || 0).toFixed(2) }}%
         </div>
         <div class="text-xs text-neutral-400">
-          Unrealized Profit on Cost
+          Profit on Invested Cost
         </div>
       </div>
     </div>
@@ -236,6 +254,7 @@ function fmtCur(val: number) {
               <th class="p-4 text-right">Avg NAV / Current NAV</th>
               <th class="p-4 text-right">Invested Capital</th>
               <th class="p-4 text-right">Current Valuation</th>
+              <th class="p-4 text-right">Day's P&L (1D)</th>
               <th class="p-4 text-right">Unrealized P&L</th>
               <th class="p-4 text-center pr-6">Actions</th>
             </tr>
@@ -301,6 +320,14 @@ function fmtCur(val: number) {
                 {{ fmtCur(h.currentValue) }}
                 <div class="text-[10px] text-neutral-400 font-normal">
                   {{ h.allocationPct }}% of MF Portfolio
+                </div>
+              </td>
+
+              <!-- Day's P&L (1D) -->
+              <td class="p-4 text-right font-mono font-bold space-y-0.5" :class="(h.oneDayPnL || 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'">
+                <div>{{ (h.oneDayPnL || 0) >= 0 ? '+' : '' }}{{ fmtCur(h.oneDayPnL || 0) }}</div>
+                <div class="text-[11px] font-semibold">
+                  {{ (h.oneDayChangePct || 0) >= 0 ? '+' : '' }}{{ (h.oneDayChangePct || 0).toFixed(2) }}%
                 </div>
               </td>
 

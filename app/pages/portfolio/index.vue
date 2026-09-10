@@ -291,7 +291,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
     <!-- 1. LOADING SKELETON (Prevents hydration mismatch between SSR & client initial render) -->
     <div
       v-if="isLoadingPortfolios"
@@ -330,7 +330,7 @@ onMounted(async () => {
     </div>
 
     <!-- MAIN DASHBOARD WHEN PORTFOLIOS EXIST -->
-    <div v-else class="space-y-6">
+    <div v-else class="w-full space-y-6">
       <!-- TOP EXECUTIVE HEADER & PORTFOLIO SWITCHER -->
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-neutral-200 dark:border-neutral-800 pb-5">
       <div>
@@ -483,7 +483,7 @@ onMounted(async () => {
     </div>
 
     <!-- TAB 1: MASTER WEALTH DASHBOARD (COMBINED STOCKS & MUTUAL FUNDS) -->
-    <div v-show="masterMode === 'master'">
+    <div v-show="masterMode === 'master'" class="w-full">
       <PortfolioMasterWealthDashboardTab
         :summary="summary"
         :mf-data="mfData"
@@ -492,7 +492,7 @@ onMounted(async () => {
     </div>
 
     <!-- TAB 1: ENTERPRISE ANALYTICS DASHBOARD (CANVAS CHARTS) -->
-    <div v-show="masterMode === 'analytics'">
+    <div v-show="masterMode === 'analytics'" class="w-full">
       <ClientOnly>
         <PortfolioDashboardTab
           :summary="summary"
@@ -509,7 +509,7 @@ onMounted(async () => {
     </div>
 
     <!-- TAB 2: HOLDINGS & OPERATIONS MANAGEMENT -->
-    <div v-show="masterMode === 'operations'" class="space-y-6">
+    <div v-show="masterMode === 'operations'" class="w-full space-y-6">
       <!-- EXECUTIVE METRICS BANNER (5 Stat Cards) -->
       <div class="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
       <!-- 1. Portfolio Value -->
@@ -1211,7 +1211,7 @@ onMounted(async () => {
 </div>
 
     <!-- TAB 3: MUTUAL FUNDS & SIPS -->
-    <div v-show="masterMode === 'mutual_funds'">
+    <div v-show="masterMode === 'mutual_funds'" class="w-full">
       <PortfolioMutualFundsTab
         :portfolio-id="activePortfolioId"
         :demat-accounts="summary?.dematAccounts || []"

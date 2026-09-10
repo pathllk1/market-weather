@@ -16,16 +16,24 @@ const emit = defineEmits<{
 const totalEquityValue = computed(() => props.summary?.portfolio.totalValue || 0)
 const totalEquityInvested = computed(() => props.summary?.portfolio.totalInvested || 0)
 const totalEquityPnL = computed(() => props.summary?.portfolio.unrealizedPnL || 0)
+const totalEquityDayPnL = computed(() => props.summary?.portfolio.dayPnL || 0)
 
 const totalMFValue = computed(() => props.mfData?.totalMFCurrentValue || 0)
 const totalMFInvested = computed(() => props.mfData?.totalMFInvested || 0)
 const totalMFPnL = computed(() => props.mfData?.totalMFPnL || 0)
+const totalMFDayPnL = computed(() => props.mfData?.totalMFDayPnL || 0)
 
 const combinedNetWorth = computed(() => totalEquityValue.value + totalMFValue.value)
 const combinedInvested = computed(() => totalEquityInvested.value + totalMFInvested.value)
 const combinedNetGain = computed(() => combinedNetWorth.value - combinedInvested.value)
 const combinedReturnPct = computed(() => {
   return combinedInvested.value > 0 ? (combinedNetGain.value / combinedInvested.value) * 100 : 0
+})
+
+const combinedDayPnL = computed(() => Number((totalEquityDayPnL.value + totalMFDayPnL.value).toFixed(2)))
+const combinedDayPnLPct = computed(() => {
+  const prevNetWorth = combinedNetWorth.value - combinedDayPnL.value
+  return prevNetWorth > 0 ? Number(((combinedDayPnL.value / prevNetWorth) * 100).toFixed(2)) : 0
 })
 
 // Asset Allocation Percentages
@@ -57,7 +65,7 @@ function fmtCur(val: number) {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="w-full space-y-6">
     <!-- 1. CONSOLIDATED MASTER WEALTH STRIP -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <!-- Grand Total Wealth -->
@@ -69,9 +77,14 @@ function fmtCur(val: number) {
         <div class="text-2xl sm:text-3xl font-black font-mono text-neutral-900 dark:text-white">
           {{ fmtCur(combinedNetWorth) }}
         </div>
-        <div class="text-xs font-mono" :class="combinedNetGain >= 0 ? 'text-emerald-500 font-semibold' : 'text-rose-500 font-semibold'">
-          {{ combinedNetGain >= 0 ? '+' : '' }}{{ fmtCur(combinedNetGain) }}
-          ({{ combinedReturnPct >= 0 ? '+' : '' }}{{ combinedReturnPct.toFixed(2) }}%)
+        <div class="flex items-center justify-between text-xs font-mono">
+          <span :class="combinedNetGain >= 0 ? 'text-emerald-500 font-semibold' : 'text-rose-500 font-semibold'">
+            {{ combinedNetGain >= 0 ? '+' : '' }}{{ fmtCur(combinedNetGain) }}
+            ({{ combinedReturnPct >= 0 ? '+' : '' }}{{ combinedReturnPct.toFixed(2) }}%)
+          </span>
+          <span class="font-bold" :class="combinedDayPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'">
+            1D: {{ combinedDayPnL >= 0 ? '+' : '' }}{{ fmtCur(combinedDayPnL) }} ({{ combinedDayPnLPct >= 0 ? '+' : '' }}{{ combinedDayPnLPct.toFixed(2) }}%)
+          </span>
         </div>
       </div>
 
@@ -98,10 +111,10 @@ function fmtCur(val: number) {
         <div class="text-2xl font-black font-mono text-neutral-900 dark:text-white">
           {{ fmtCur(totalEquityValue) }}
         </div>
-        <div class="flex items-center justify-between text-xs">
-          <span class="text-neutral-400 font-mono">Invested: {{ fmtCur(totalEquityInvested) }}</span>
-          <span class="font-mono font-bold" :class="totalEquityPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'">
-            {{ totalEquityPnL >= 0 ? '+' : '' }}{{ fmtCur(totalEquityPnL) }}
+        <div class="flex items-center justify-between text-xs font-mono">
+          <span class="text-neutral-400">Inv: {{ fmtCur(totalEquityInvested) }}</span>
+          <span :class="totalEquityDayPnL >= 0 ? 'text-emerald-500 font-semibold' : 'text-rose-500 font-semibold'">
+            1D: {{ totalEquityDayPnL >= 0 ? '+' : '' }}{{ fmtCur(totalEquityDayPnL) }}
           </span>
         </div>
       </div>
@@ -115,10 +128,10 @@ function fmtCur(val: number) {
         <div class="text-2xl font-black font-mono text-neutral-900 dark:text-white">
           {{ fmtCur(totalMFValue) }}
         </div>
-        <div class="flex items-center justify-between text-xs">
-          <span class="text-neutral-400 font-mono">Invested: {{ fmtCur(totalMFInvested) }}</span>
-          <span class="font-mono font-bold" :class="totalMFPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'">
-            {{ totalMFPnL >= 0 ? '+' : '' }}{{ fmtCur(totalMFPnL) }}
+        <div class="flex items-center justify-between text-xs font-mono">
+          <span class="text-neutral-400">Inv: {{ fmtCur(totalMFInvested) }}</span>
+          <span :class="totalMFDayPnL >= 0 ? 'text-emerald-500 font-semibold' : 'text-rose-500 font-semibold'">
+            1D: {{ totalMFDayPnL >= 0 ? '+' : '' }}{{ fmtCur(totalMFDayPnL) }}
           </span>
         </div>
       </div>
@@ -251,8 +264,11 @@ function fmtCur(val: number) {
             </div>
             <div class="text-right font-mono">
               <div class="font-bold text-neutral-900 dark:text-white">{{ fmtCur(f.currentValue) }}</div>
-              <div :class="f.unrealizedPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'" class="text-[11px] font-semibold">
-                {{ f.unrealizedPnL >= 0 ? '+' : '' }}{{ f.unrealizedPnLPct.toFixed(2) }}%
+              <div :class="f.unrealizedPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'" class="text-[11px] font-semibold flex items-center justify-end gap-1">
+                <span>{{ f.unrealizedPnL >= 0 ? '+' : '' }}{{ f.unrealizedPnLPct.toFixed(2) }}%</span>
+                <span v-if="f.oneDayChangePct" class="text-[10px] font-medium" :class="f.oneDayChangePct >= 0 ? 'text-emerald-500' : 'text-rose-500'">
+                  (1D: {{ f.oneDayChangePct >= 0 ? '+' : '' }}{{ f.oneDayChangePct.toFixed(2) }}%)
+                </span>
               </div>
             </div>
           </div>

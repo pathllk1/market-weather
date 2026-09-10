@@ -226,3 +226,29 @@ export interface StockFundamentalDetails {
   }>
 }
 
+export interface AITechnicalLevels {
+  support1: number
+  support2: number
+  resistance1: number
+  resistance2: number
+  stopLoss: number
+}
+
+export interface AITechnicalReviewResponse {
+  symbol: string
+  companyName: string
+  currentPrice: number
+  aiScore: number
+  aiRating: 'Strong Bullish' | 'Bullish' | 'Neutral' | 'Bearish' | 'Strong Bearish'
+  confidence: 'High' | 'Medium' | 'Low'
+  timeHorizon: string
+  executiveSummary: string
+  keyStrengths: string[]
+  keyRisks: string[]
+  technicalLevels: AITechnicalLevels
+  tradingTactics: string
+  modelUsed: string
+  generatedAt: string
+  isCached: boolean
+  algorithmicScore: number
+}

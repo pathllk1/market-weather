@@ -10,6 +10,7 @@ export interface MFHolding {
   navDate: string
   oneDayChange: number
   oneDayChangePct: number
+  oneDayPnL: number
   totalInvested: number
   currentValue: number
   unrealizedPnL: number
@@ -33,6 +34,9 @@ export interface MFHoldingsResponse {
   totalMFCurrentValue: number
   totalMFPnL: number
   totalMFReturnPct: number
+  totalMFDayPnL: number
+  totalMFDayPnLPct: number
+  latestNavDate?: string
   categoryAllocation: MFCategoryAllocation[]
 }
 
@@ -79,5 +83,5 @@ export interface MFDetailResponse {
     '3Y': number | null
     '5Y': number | null
   }
-  chartPoints: Array<{ time: string; value: number }>
+  chartPoints: Array<{ time: string, value: number }>
 }

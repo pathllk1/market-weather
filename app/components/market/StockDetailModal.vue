@@ -39,7 +39,8 @@ const activeTab = ref('chart')
 const tabItems = [
   { label: 'Candlestick Chart & Range', icon: 'i-lucide-candlestick-chart', value: 'chart' },
   { label: 'Technical Indicators Radar', icon: 'i-lucide-gauge', value: 'radar' },
-  { label: 'Fundamental Analysis', icon: 'i-lucide-pie-chart', value: 'fundamentals' }
+  { label: 'Fundamental Analysis', icon: 'i-lucide-pie-chart', value: 'fundamentals' },
+  { label: 'AI Technical Review', icon: 'i-lucide-sparkles', value: 'ai_review' }
 ]
 
 async function loadStockDetails() {
@@ -130,7 +131,10 @@ function handleTradeClick(type: 'BUY' | 'SELL' = 'BUY') {
               title="Record BUY trade for this stock"
               @click="handleTradeClick('BUY')"
             >
-              <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" />
+              <UIcon
+                name="i-lucide-plus"
+                class="h-3.5 w-3.5"
+              />
               <span>BUY</span>
             </button>
             <button
@@ -139,7 +143,10 @@ function handleTradeClick(type: 'BUY' | 'SELL' = 'BUY') {
               title="Record SELL trade for this stock"
               @click="handleTradeClick('SELL')"
             >
-              <UIcon name="i-lucide-minus" class="h-3.5 w-3.5" />
+              <UIcon
+                name="i-lucide-minus"
+                class="h-3.5 w-3.5"
+              />
               <span>SELL</span>
             </button>
 
@@ -216,7 +223,10 @@ function handleTradeClick(type: 'BUY' | 'SELL' = 'BUY') {
         class="flex flex-col items-center justify-center py-16 px-4 text-center space-y-3"
       >
         <div class="p-3 rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-500">
-          <UIcon name="i-lucide-alert-triangle" class="w-8 h-8" />
+          <UIcon
+            name="i-lucide-alert-triangle"
+            class="w-8 h-8"
+          />
         </div>
         <div>
           <h4 class="text-base font-bold text-neutral-900 dark:text-neutral-100">
@@ -293,6 +303,17 @@ function handleTradeClick(type: 'BUY' | 'SELL' = 'BUY') {
           class="pt-2"
         >
           <MarketStockFundamentals
+            :symbol="stockData.symbol"
+            :current-price="stockData.currentPrice"
+          />
+        </div>
+
+        <!-- Tab 4: AI Technical Review -->
+        <div
+          v-else-if="activeTab === 'ai_review'"
+          class="pt-2"
+        >
+          <MarketStockAIReview
             :symbol="stockData.symbol"
             :current-price="stockData.currentPrice"
           />

@@ -577,7 +577,7 @@ function fmtCur(val: number) {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="w-full space-y-6">
     <!-- 1. EXECUTIVE KPI MATRIX (5 Institutional Stat Cards) -->
     <div class="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
       <!-- Total Net Worth -->
