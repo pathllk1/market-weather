@@ -252,3 +252,16 @@ export interface AITechnicalReviewResponse {
   isCached: boolean
   algorithmicScore: number
 }
+
+export interface AIReviewsListResponse {
+  total: number
+  stats: {
+    total: number
+    bullishCount: number
+    bearishCount: number
+    neutralCount: number
+    avgAiScore: number
+    lastRunTime?: string
+  }
+  reviews: AITechnicalReviewResponse[]
+}

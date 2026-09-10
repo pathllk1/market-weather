@@ -1,0 +1,75 @@
+name: Automated AI Technical Review
+
+on:
+  schedule:
+    # Runs Monday through Friday at 11:30 AM UTC (5:00 PM IST - 90 minutes after NSE/BSE market close)
+    - cron: '30 11 * * 1-5'
+
+  workflow_dispatch:
+    inputs:
+      min_score:
+        description: 'Minimum algorithmic score threshold (>=)'
+        required: false
+        default: '60'
+      limit:
+        description: 'Maximum stocks to evaluate (0 = ALL matching stocks)'
+        required: false
+        default: '0'
+      batch_size:
+        description: 'Stocks per batch'
+        required: false
+        default: '5'
+      delay_ms:
+        description: 'Pause between stocks in ms'
+        required: false
+        default: '2000'
+      batch_delay_ms:
+        description: 'Cooldown pause between batches in ms'
+        required: false
+        default: '6000'
+      force:
+        description: 'Force re-analysis even if already reviewed in last 16 hours'
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: ai-technical-review
+  cancel-in-progress: false
+
+jobs:
+  run-ai-review:
+    name: Groq AI Technical Scoring
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Execute Automated AI Technical Review
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'openai/gpt-oss-120b' }}
+        run: |
+          pnpm run cron:ai-review \
+            --min-score=${{ inputs.min_score || 60 }} \
+            --limit=${{ inputs.limit || 0 }} \
+            --batch-size=${{ inputs.batch_size || 5 }} \
+            --delay-ms=${{ inputs.delay_ms || 2000 }} \
+            --batch-delay-ms=${{ inputs.batch_delay_ms || 6000 }} \
+            ${{ (inputs.force == true || inputs.force == 'true') && '--force' || '' }}

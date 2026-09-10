@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
     "test:turso": "node scripts/test-turso.mjs",
-    "db:check": "node scripts/check-db.mjs"
+    "db:check": "node scripts/check-db.mjs",
+    "cron:ai-review": "node scripts/cron-ai-technical-review.mjs"
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.125",

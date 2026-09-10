@@ -1,3 +1,4 @@
+import type { AITechnicalReviewResponse } from '~/types/market'
 import { getTursoClient } from '../../utils/turso'
 import { getLiveQuotes } from '../../utils/yahoo'
 import { generateAITechnicalReview, type RawTechnicalInput } from '../../utils/groq'
@@ -19,7 +20,67 @@ export default defineEventHandler(async (event) => {
 
   const db = getTursoClient()
 
-  // 1. Fetch complete technical analysis row matching with or without .NS
+  // 1. If not forcing a fresh review, check if we already have a saved review in Turso DB
+  if (!forceRefresh) {
+    try {
+      const savedRes = await db.execute({
+        sql: 'SELECT * FROM ai_technical_reviews WHERE symbol IN (?, ?) LIMIT 1',
+        args: [symbolWithoutNs, symbolWithNs]
+      })
+      const saved = savedRes.rows[0] as Record<string, unknown> | undefined
+      if (saved) {
+        let keyStrengths: string[] = []
+        let keyRisks: string[] = []
+        let technicalLevels = {
+          support1: 0,
+          support2: 0,
+          resistance1: 0,
+          resistance2: 0,
+          stopLoss: 0
+        }
+
+        try {
+          keyStrengths = JSON.parse(String(saved.key_strengths || '[]'))
+        } catch {
+          keyStrengths = []
+        }
+        try {
+          keyRisks = JSON.parse(String(saved.key_risks || '[]'))
+        } catch {
+          keyRisks = []
+        }
+        try {
+          technicalLevels = JSON.parse(String(saved.technical_levels || '{}'))
+        } catch {
+          // fallback to defaults
+        }
+
+        const cachedResponse: AITechnicalReviewResponse = {
+          symbol: String(saved.symbol),
+          companyName: String(saved.company_name),
+          currentPrice: Number(saved.current_price),
+          aiScore: Number(saved.ai_score),
+          aiRating: saved.ai_rating as AITechnicalReviewResponse['aiRating'],
+          confidence: saved.confidence as AITechnicalReviewResponse['confidence'],
+          timeHorizon: String(saved.time_horizon),
+          executiveSummary: String(saved.executive_summary),
+          keyStrengths,
+          keyRisks,
+          technicalLevels,
+          tradingTactics: String(saved.trading_tactics),
+          modelUsed: String(saved.model_used),
+          generatedAt: new Date(Number(saved.updated_at)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+          isCached: true,
+          algorithmicScore: Number(saved.algorithmic_score)
+        }
+        return cachedResponse
+      }
+    } catch (cacheErr) {
+      console.warn(`[AI Review API] Error reading cached review for ${rawSymbol}:`, cacheErr)
+    }
+  }
+
+  // 2. Fetch complete technical analysis row matching with or without .NS
   let tech: Record<string, unknown> | undefined
 
   try {
@@ -163,5 +224,56 @@ export default defineEventHandler(async (event) => {
 
   // 5. Generate independent AI Review (passes only raw indicator values, with algorithmicScore attached for UI comparison only)
   const result = await generateAITechnicalReview(technicalInput, algorithmicScore, forceRefresh)
+
+  // 6. Save or update the freshly generated review in Turso database
+  try {
+    const now = Date.now()
+    await db.execute({
+      sql: `
+        INSERT INTO ai_technical_reviews (
+          symbol, company_name, current_price, ai_score, ai_rating,
+          confidence, time_horizon, executive_summary, key_strengths,
+          key_risks, technical_levels, trading_tactics, model_used,
+          algorithmic_score, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(symbol) DO UPDATE SET
+          company_name = excluded.company_name,
+          current_price = excluded.current_price,
+          ai_score = excluded.ai_score,
+          ai_rating = excluded.ai_rating,
+          confidence = excluded.confidence,
+          time_horizon = excluded.time_horizon,
+          executive_summary = excluded.executive_summary,
+          key_strengths = excluded.key_strengths,
+          key_risks = excluded.key_risks,
+          technical_levels = excluded.technical_levels,
+          trading_tactics = excluded.trading_tactics,
+          model_used = excluded.model_used,
+          algorithmic_score = excluded.algorithmic_score,
+          updated_at = excluded.updated_at;
+      `,
+      args: [
+        symbolWithoutNs,
+        result.companyName,
+        result.currentPrice,
+        result.aiScore,
+        result.aiRating,
+        result.confidence,
+        result.timeHorizon,
+        result.executiveSummary,
+        JSON.stringify(result.keyStrengths),
+        JSON.stringify(result.keyRisks),
+        JSON.stringify(result.technicalLevels),
+        result.tradingTactics,
+        result.modelUsed,
+        result.algorithmicScore,
+        now,
+        now
+      ]
+    })
+  } catch (saveErr) {
+    console.warn(`[AI Review API] Non-fatal error saving review to DB for ${rawSymbol}:`, saveErr)
+  }
+
   return result
 })

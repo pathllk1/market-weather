@@ -11,8 +11,8 @@ definePageMeta({
   layout: 'default'
 })
 
-// Navigation mode: 'live' (Live NSE & Charts) | 'views' (Preferred OHLCV Views) | 'screener' (Full Market Matrix)
-const activeTab = ref<'live' | 'views' | 'screener'>('live')
+// Navigation mode: 'live' (Live NSE & Charts) | 'views' (Preferred OHLCV Views) | 'screener' (Full Market Matrix) | 'ai-reviews' (AI Intelligence & Scores)
+const activeTab = ref<'live' | 'views' | 'screener' | 'ai-reviews'>('live')
 
 // --- Screener State ---
 const searchQuery = ref('')
@@ -574,8 +574,30 @@ onUnmounted(() => {
             class="h-4 w-4"
           />
           <span>Market Screener</span>
-          <span v-if="summary.totalStocks" class="text-[10px] font-normal opacity-80">({{ summary.totalStocks }} Equities)</span>
-          <span v-else class="text-[10px] font-normal opacity-80">(All Equities)</span>
+          <span
+            v-if="summary.totalStocks"
+            class="text-[10px] font-normal opacity-80"
+          >({{ summary.totalStocks }} Equities)</span>
+          <span
+            v-else
+            class="text-[10px] font-normal opacity-80"
+          >(All Equities)</span>
+        </button>
+
+        <button
+          type="button"
+          class="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all shrink-0 select-none"
+          :class="activeTab === 'ai-reviews' ? 'bg-primary text-white shadow-md' : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'"
+          @click="activeTab = 'ai-reviews'"
+        >
+          <UIcon
+            name="i-lucide-sparkles"
+            class="h-4 w-4"
+          />
+          <span>AI Intelligence & Scores</span>
+          <span class="inline-flex items-center gap-1 rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] font-bold text-primary dark:text-primary-300">
+            Groq AI
+          </span>
         </button>
       </div>
 
@@ -596,7 +618,10 @@ onUnmounted(() => {
     </div>
 
     <!-- TAB 1: LIVE NSE BENCHMARKS & INTRADAY CHARTS (DEFAULT) -->
-    <div v-if="activeTab === 'live'" class="w-full">
+    <div
+      v-if="activeTab === 'live'"
+      class="w-full"
+    >
       <MarketLiveMarketPulseTab
         @inspect="openDetail"
         @open-screener="activeTab = 'screener'"
@@ -1257,6 +1282,14 @@ onUnmounted(() => {
           </div>
         </template>
       </UCard>
+    </div>
+
+    <!-- TAB 4: AI INTELLIGENCE & SCORES -->
+    <div
+      v-else-if="activeTab === 'ai-reviews'"
+      class="w-full"
+    >
+      <MarketAIReviewsTab @open-stock="openDetail" />
     </div>
 
     <!-- Create / Edit Preferred View Modal -->

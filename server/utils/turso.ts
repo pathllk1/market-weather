@@ -19,9 +19,10 @@ export function getTursoClient(): Client {
 async function safeAddColumn(db: Client, table: string, columnDef: string) {
   try {
     await db.execute(`ALTER TABLE ${table} ADD COLUMN ${columnDef};`)
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err)
     // Ignore error if column already exists
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
+    if (!errMsg.includes('duplicate column') && !errMsg.includes('already exists')) {
       // ignore silently
     }
   }
@@ -281,6 +282,28 @@ export async function initTursoSchema(): Promise<void> {
     );
   `)
 
+  // 16. AI Technical Reviews Table
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS ai_technical_reviews (
+      symbol TEXT PRIMARY KEY,
+      company_name TEXT NOT NULL,
+      current_price REAL NOT NULL,
+      ai_score INTEGER NOT NULL,
+      ai_rating TEXT NOT NULL,
+      confidence TEXT NOT NULL,
+      time_horizon TEXT NOT NULL,
+      executive_summary TEXT NOT NULL,
+      key_strengths TEXT NOT NULL,
+      key_risks TEXT NOT NULL,
+      technical_levels TEXT NOT NULL,
+      trading_tactics TEXT NOT NULL,
+      model_used TEXT NOT NULL,
+      algorithmic_score REAL NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  `)
+
   // Indexes for high-performance parameterized lookups
   try {
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`)
@@ -305,6 +328,8 @@ export async function initTursoSchema(): Promise<void> {
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_portfolio_mf_tx_port ON portfolio_mf_transactions(portfolio_id, transaction_date ASC);`)
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_portfolio_mf_tx_scheme ON portfolio_mf_transactions(scheme_code);`)
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_portfolio_mf_tx_demat ON portfolio_mf_transactions(demat_account_id);`)
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_ai_reviews_score ON ai_technical_reviews(ai_score);`)
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_ai_reviews_updated ON ai_technical_reviews(updated_at DESC);`)
   } catch {
     // Indexes might already exist
   }
