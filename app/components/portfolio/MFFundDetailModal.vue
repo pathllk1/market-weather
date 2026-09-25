@@ -218,6 +218,17 @@ function initChart() {
         style: 3,
         labelBackgroundColor: '#10b981'
       }
+    },
+    handleScroll: {
+      mouseWheel: false,
+      pressedMouseMove: true,
+      horzTouchDrag: true,
+      vertTouchDrag: false
+    },
+    handleScale: {
+      axisPressedMouseMove: true,
+      mouseWheel: false,
+      pinch: true
     }
   })
 

@@ -140,3 +140,96 @@ export interface MarketWeatherSectorImpact {
     correlationFactor: string
   }>
 }
+
+export interface StatMetric {
+  min: number
+  max: number
+  avg: number
+}
+
+export interface PeriodAggregatedRow {
+  period: string
+  label: string
+  readingsCount: number
+  temperature: StatMetric
+  apparentTemperature?: StatMetric
+  usAqi: StatMetric
+  aqiCategory: AqiCategoryInfo
+  pm25: StatMetric
+  pm10: StatMetric
+  humidity: StatMetric
+  windSpeed: StatMetric
+  totalRain: number
+}
+
+export interface CityWeatherStats {
+  city: string
+  state: string
+  totalReadings: number
+  firstReading: string
+  lastReading: string
+  sevenDays: {
+    summary: {
+      temperature: StatMetric
+      apparentTemperature: StatMetric
+      usAqi: StatMetric
+      aqiCategory: AqiCategoryInfo
+      pm25: StatMetric
+      pm10: StatMetric
+      humidity: StatMetric
+      windSpeed: StatMetric
+      totalRain: number
+    }
+    days: PeriodAggregatedRow[]
+  }
+  monthly: {
+    summary: {
+      temperature: StatMetric
+      usAqi: StatMetric
+      aqiCategory: AqiCategoryInfo
+      totalRain: number
+    }
+    months: PeriodAggregatedRow[]
+  }
+  yearly: {
+    summary: {
+      temperature: StatMetric
+      usAqi: StatMetric
+      aqiCategory: AqiCategoryInfo
+      totalRain: number
+    }
+    years: PeriodAggregatedRow[]
+  }
+  records: {
+    hottest: { temperature: number; date: string; feelsLike: number }
+    coldest: { temperature: number; date: string }
+    highestAqi: { aqi: number; date: string; category: AqiCategoryInfo }
+    lowestAqi: { aqi: number; date: string; category: AqiCategoryInfo }
+    wettestDay: { rain: number; date: string }
+    maxWind: { wind: number; date: string }
+  }
+  diurnal: {
+    daytime: { avgTemp: number; avgAqi: number; avgHumidity: number; hoursCount: number }
+    nighttime: { avgTemp: number; avgAqi: number; avgHumidity: number; hoursCount: number }
+    tempVariance: number
+    aqiVariance: number
+  }
+  aqiDistribution: Array<{
+    category: string
+    level: AqiLevel
+    count: number
+    percentage: number
+    color: string
+    badgeClass: string
+  }>
+  pollutantChemistry: Array<{
+    pollutant: string
+    name: string
+    unit: string
+    min: number
+    max: number
+    avg: number
+    whoLimit: number
+    status: 'safe' | 'moderate' | 'excess'
+  }>
+}

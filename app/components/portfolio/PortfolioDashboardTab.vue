@@ -245,8 +245,8 @@ function initCharts() {
       fixLeftEdge: true,
       fixRightEdge: true
     },
-    handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true },
-    handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true }
+    handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true },
+    handleScale: { axisPressedMouseMove: true, mouseWheel: false, pinch: true }
   })
 
   // Portfolio Area Series
@@ -342,7 +342,9 @@ function initCharts() {
         rightOffset: 0,
         fixLeftEdge: true,
         fixRightEdge: true
-      }
+      },
+      handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true },
+      handleScale: { axisPressedMouseMove: true, mouseWheel: false, pinch: true }
     })
 
     drawdownAreaSeries = drawdownChart.addSeries(AreaSeries, {

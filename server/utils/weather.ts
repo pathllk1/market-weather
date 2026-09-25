@@ -8,7 +8,10 @@ import type {
   WeatherHistoryResponse,
   WeatherHistoryPoint,
   WeatherRankingsResponse,
-  MarketWeatherSectorImpact
+  MarketWeatherSectorImpact,
+  CityWeatherStats,
+  PeriodAggregatedRow,
+  StatMetric
 } from '~/types/weather'
 
 export function getAqiCategoryInfo(aqi: number): AqiCategoryInfo {
@@ -507,4 +510,602 @@ export async function getWeatherMarketCorrelations(): Promise<MarketWeatherSecto
       ]
     }
   ]
+}
+
+function formatPeriodLabel(period: string, type: 'day' | 'month' | 'year'): string {
+  try {
+    if (type === 'day') {
+      const d = new Date(period + 'T00:00:00Z')
+      return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+    }
+    if (type === 'month') {
+      const [year, month] = period.split('-')
+      const d = new Date(Date.UTC(Number(year), Number(month) - 1, 1))
+      return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    }
+    return `Year ${period}`
+  } catch {
+    return period
+  }
+}
+
+function mapRowToPeriodAggregated(r: Row, type: 'day' | 'month' | 'year'): PeriodAggregatedRow {
+  const avgAqi = Math.round(Number(r.avg_aqi ?? 0))
+  const period = String(r.period)
+
+  return {
+    period,
+    label: formatPeriodLabel(period, type),
+    readingsCount: Number(r.readings_count ?? 0),
+    temperature: {
+      min: Number(Number(r.min_temp ?? 0).toFixed(1)),
+      max: Number(Number(r.max_temp ?? 0).toFixed(1)),
+      avg: Number(Number(r.avg_temp ?? 0).toFixed(1))
+    },
+    apparentTemperature: r.min_feels !== undefined
+      ? {
+          min: Number(Number(r.min_feels ?? 0).toFixed(1)),
+          max: Number(Number(r.max_feels ?? 0).toFixed(1)),
+          avg: Number(Number(r.avg_feels ?? 0).toFixed(1))
+        }
+      : undefined,
+    usAqi: {
+      min: Math.round(Number(r.min_aqi ?? 0)),
+      max: Math.round(Number(r.max_aqi ?? 0)),
+      avg: avgAqi
+    },
+    aqiCategory: getAqiCategoryInfo(avgAqi),
+    pm25: {
+      min: Number(Number(r.min_pm25 ?? 0).toFixed(1)),
+      max: Number(Number(r.max_pm25 ?? 0).toFixed(1)),
+      avg: Number(Number(r.avg_pm25 ?? 0).toFixed(1))
+    },
+    pm10: {
+      min: Number(Number(r.min_pm10 ?? 0).toFixed(1)),
+      max: Number(Number(r.max_pm10 ?? 0).toFixed(1)),
+      avg: Number(Number(r.avg_pm10 ?? 0).toFixed(1))
+    },
+    humidity: {
+      min: Math.round(Number(r.min_humidity ?? 0)),
+      max: Math.round(Number(r.max_humidity ?? 0)),
+      avg: Math.round(Number(r.avg_humidity ?? 0))
+    },
+    windSpeed: {
+      min: Number(Number(r.min_wind ?? 0).toFixed(1)),
+      max: Number(Number(r.max_wind ?? 0).toFixed(1)),
+      avg: Number(Number(r.avg_wind ?? 0).toFixed(1))
+    },
+    totalRain: Number(Number(r.total_rain ?? 0).toFixed(1))
+  }
+}
+
+export async function getCityWeatherStats(city: string): Promise<CityWeatherStats> {
+  const db = getTursoClient()
+
+  // 1. Get City info and basic boundaries
+  const metaRes = await db.execute({
+    sql: `
+      SELECT city, state, COUNT(*) as cnt, MIN(timestamp_utc) as first_ts, MAX(timestamp_utc) as last_ts
+      FROM weather_aqi
+      WHERE city = ?
+      GROUP BY city, state;
+    `,
+    args: [city]
+  })
+
+  const meta = metaRes.rows[0]
+  if (!meta) {
+    throw new Error(`City "${city}" not found in weather records.`)
+  }
+
+  // 2. Last 7 Days Daily Breakdown
+  const sevenDaysRes = await db.execute({
+    sql: `
+      SELECT 
+        DATE(timestamp_utc) as period,
+        COUNT(*) as readings_count,
+        ROUND(MIN(temperature), 1) as min_temp,
+        ROUND(MAX(temperature), 1) as max_temp,
+        ROUND(AVG(temperature), 1) as avg_temp,
+        ROUND(MIN(apparent_temperature), 1) as min_feels,
+        ROUND(MAX(apparent_temperature), 1) as max_feels,
+        ROUND(AVG(apparent_temperature), 1) as avg_feels,
+        ROUND(MIN(us_aqi), 0) as min_aqi,
+        ROUND(MAX(us_aqi), 0) as max_aqi,
+        ROUND(AVG(us_aqi), 0) as avg_aqi,
+        ROUND(MIN(pm2_5), 1) as min_pm25,
+        ROUND(MAX(pm2_5), 1) as max_pm25,
+        ROUND(AVG(pm2_5), 1) as avg_pm25,
+        ROUND(MIN(pm10), 1) as min_pm10,
+        ROUND(MAX(pm10), 1) as max_pm10,
+        ROUND(AVG(pm10), 1) as avg_pm10,
+        ROUND(MIN(relative_humidity), 0) as min_humidity,
+        ROUND(MAX(relative_humidity), 0) as max_humidity,
+        ROUND(AVG(relative_humidity), 0) as avg_humidity,
+        ROUND(MIN(wind_speed), 1) as min_wind,
+        ROUND(MAX(wind_speed), 1) as max_wind,
+        ROUND(AVG(wind_speed), 1) as avg_wind,
+        ROUND(SUM(precipitation), 1) as total_rain
+      FROM weather_aqi
+      WHERE city = ?
+      GROUP BY DATE(timestamp_utc)
+      ORDER BY period DESC
+      LIMIT 7;
+    `,
+    args: [city]
+  })
+  const sevenDaysRows = sevenDaysRes.rows.map(r => mapRowToPeriodAggregated(r, 'day'))
+
+  // 7 Days Summary Overall
+  const sevenDaysSummaryRes = await db.execute({
+    sql: `
+      SELECT 
+        ROUND(MIN(temperature), 1) as min_temp,
+        ROUND(MAX(temperature), 1) as max_temp,
+        ROUND(AVG(temperature), 1) as avg_temp,
+        ROUND(MIN(apparent_temperature), 1) as min_feels,
+        ROUND(MAX(apparent_temperature), 1) as max_feels,
+        ROUND(AVG(apparent_temperature), 1) as avg_feels,
+        ROUND(MIN(us_aqi), 0) as min_aqi,
+        ROUND(MAX(us_aqi), 0) as max_aqi,
+        ROUND(AVG(us_aqi), 0) as avg_aqi,
+        ROUND(MIN(pm2_5), 1) as min_pm25,
+        ROUND(MAX(pm2_5), 1) as max_pm25,
+        ROUND(AVG(pm2_5), 1) as avg_pm25,
+        ROUND(MIN(pm10), 1) as min_pm10,
+        ROUND(MAX(pm10), 1) as max_pm10,
+        ROUND(AVG(pm10), 1) as avg_pm10,
+        ROUND(MIN(relative_humidity), 0) as min_humidity,
+        ROUND(MAX(relative_humidity), 0) as max_humidity,
+        ROUND(AVG(relative_humidity), 0) as avg_humidity,
+        ROUND(MIN(wind_speed), 1) as min_wind,
+        ROUND(MAX(wind_speed), 1) as max_wind,
+        ROUND(AVG(wind_speed), 1) as avg_wind,
+        ROUND(SUM(precipitation), 1) as total_rain
+      FROM (
+        SELECT * FROM weather_aqi
+        WHERE city = ?
+        ORDER BY timestamp_utc DESC
+        LIMIT 168
+      );
+    `,
+    args: [city]
+  })
+  const s7 = (sevenDaysSummaryRes.rows[0] || {}) as Record<string, any>
+  const s7AvgAqi = Math.round(Number(s7.avg_aqi ?? 0))
+
+  // 3. Monthly Breakdown
+  const monthlyRes = await db.execute({
+    sql: `
+      SELECT 
+        SUBSTR(timestamp_utc, 1, 7) as period,
+        COUNT(*) as readings_count,
+        ROUND(MIN(temperature), 1) as min_temp,
+        ROUND(MAX(temperature), 1) as max_temp,
+        ROUND(AVG(temperature), 1) as avg_temp,
+        ROUND(MIN(apparent_temperature), 1) as min_feels,
+        ROUND(MAX(apparent_temperature), 1) as max_feels,
+        ROUND(AVG(apparent_temperature), 1) as avg_feels,
+        ROUND(MIN(us_aqi), 0) as min_aqi,
+        ROUND(MAX(us_aqi), 0) as max_aqi,
+        ROUND(AVG(us_aqi), 0) as avg_aqi,
+        ROUND(MIN(pm2_5), 1) as min_pm25,
+        ROUND(MAX(pm2_5), 1) as max_pm25,
+        ROUND(AVG(pm2_5), 1) as avg_pm25,
+        ROUND(MIN(pm10), 1) as min_pm10,
+        ROUND(MAX(pm10), 1) as max_pm10,
+        ROUND(AVG(pm10), 1) as avg_pm10,
+        ROUND(MIN(relative_humidity), 0) as min_humidity,
+        ROUND(MAX(relative_humidity), 0) as max_humidity,
+        ROUND(AVG(relative_humidity), 0) as avg_humidity,
+        ROUND(MIN(wind_speed), 1) as min_wind,
+        ROUND(MAX(wind_speed), 1) as max_wind,
+        ROUND(AVG(wind_speed), 1) as avg_wind,
+        ROUND(SUM(precipitation), 1) as total_rain
+      FROM weather_aqi
+      WHERE city = ?
+      GROUP BY SUBSTR(timestamp_utc, 1, 7)
+      ORDER BY period DESC;
+    `,
+    args: [city]
+  })
+  const monthlyRows = monthlyRes.rows.map(r => mapRowToPeriodAggregated(r, 'month'))
+
+  // 4. Yearly Breakdown
+  const yearlyRes = await db.execute({
+    sql: `
+      SELECT 
+        SUBSTR(timestamp_utc, 1, 4) as period,
+        COUNT(*) as readings_count,
+        ROUND(MIN(temperature), 1) as min_temp,
+        ROUND(MAX(temperature), 1) as max_temp,
+        ROUND(AVG(temperature), 1) as avg_temp,
+        ROUND(MIN(apparent_temperature), 1) as min_feels,
+        ROUND(MAX(apparent_temperature), 1) as max_feels,
+        ROUND(AVG(apparent_temperature), 1) as avg_feels,
+        ROUND(MIN(us_aqi), 0) as min_aqi,
+        ROUND(MAX(us_aqi), 0) as max_aqi,
+        ROUND(AVG(us_aqi), 0) as avg_aqi,
+        ROUND(MIN(pm2_5), 1) as min_pm25,
+        ROUND(MAX(pm2_5), 1) as max_pm25,
+        ROUND(AVG(pm2_5), 1) as avg_pm25,
+        ROUND(MIN(pm10), 1) as min_pm10,
+        ROUND(MAX(pm10), 1) as max_pm10,
+        ROUND(AVG(pm10), 1) as avg_pm10,
+        ROUND(MIN(relative_humidity), 0) as min_humidity,
+        ROUND(MAX(relative_humidity), 0) as max_humidity,
+        ROUND(AVG(relative_humidity), 0) as avg_humidity,
+        ROUND(MIN(wind_speed), 1) as min_wind,
+        ROUND(MAX(wind_speed), 1) as max_wind,
+        ROUND(AVG(wind_speed), 1) as avg_wind,
+        ROUND(SUM(precipitation), 1) as total_rain
+      FROM weather_aqi
+      WHERE city = ?
+      GROUP BY SUBSTR(timestamp_utc, 1, 4)
+      ORDER BY period DESC;
+    `,
+    args: [city]
+  })
+  const yearlyRows = yearlyRes.rows.map(r => mapRowToPeriodAggregated(r, 'year'))
+
+  // 5. Extremes & Records
+  const hottestRes = await db.execute({
+    sql: 'SELECT temperature, apparent_temperature, timestamp_local, timestamp_utc FROM weather_aqi WHERE city = ? ORDER BY temperature DESC LIMIT 1;',
+    args: [city]
+  })
+  const coldestRes = await db.execute({
+    sql: 'SELECT temperature, timestamp_local, timestamp_utc FROM weather_aqi WHERE city = ? ORDER BY temperature ASC LIMIT 1;',
+    args: [city]
+  })
+  const highAqiRes = await db.execute({
+    sql: 'SELECT us_aqi, timestamp_local, timestamp_utc FROM weather_aqi WHERE city = ? ORDER BY us_aqi DESC LIMIT 1;',
+    args: [city]
+  })
+  const lowAqiRes = await db.execute({
+    sql: 'SELECT us_aqi, timestamp_local, timestamp_utc FROM weather_aqi WHERE city = ? ORDER BY us_aqi ASC LIMIT 1;',
+    args: [city]
+  })
+  const rainRes = await db.execute({
+    sql: 'SELECT precipitation, timestamp_local, timestamp_utc FROM weather_aqi WHERE city = ? ORDER BY precipitation DESC LIMIT 1;',
+    args: [city]
+  })
+  const windRes = await db.execute({
+    sql: 'SELECT wind_speed, timestamp_local, timestamp_utc FROM weather_aqi WHERE city = ? ORDER BY wind_speed DESC LIMIT 1;',
+    args: [city]
+  })
+
+  const hotRow = hottestRes.rows[0]
+  const coldRow = coldestRes.rows[0]
+  const highAqiRow = highAqiRes.rows[0]
+  const lowAqiRow = lowAqiRes.rows[0]
+  const rainRow = rainRes.rows[0]
+  const windRow = windRes.rows[0]
+
+  const maxAqiVal = highAqiRow ? Math.round(Number(highAqiRow.us_aqi)) : 0
+  const minAqiVal = lowAqiRow ? Math.round(Number(lowAqiRow.us_aqi)) : 0
+
+  // 6. Diurnal Analysis (Day: 06:00-18:00 IST -> UTC 01:00-12:00 vs Night: 18:00-06:00 IST -> UTC 13:00-00:00)
+  const diurnalRes = await db.execute({
+    sql: `
+      SELECT 
+        CASE 
+          WHEN CAST(SUBSTR(timestamp_utc, 12, 2) AS INTEGER) BETWEEN 1 AND 12 THEN 'day'
+          ELSE 'night'
+        END as time_slot,
+        COUNT(*) as cnt,
+        ROUND(AVG(temperature), 1) as avg_temp,
+        ROUND(AVG(us_aqi), 0) as avg_aqi,
+        ROUND(AVG(relative_humidity), 0) as avg_humidity
+      FROM weather_aqi
+      WHERE city = ?
+      GROUP BY time_slot;
+    `,
+    args: [city]
+  })
+
+  let dayStats = { avgTemp: 0, avgAqi: 0, avgHumidity: 0, hoursCount: 0 }
+  let nightStats = { avgTemp: 0, avgAqi: 0, avgHumidity: 0, hoursCount: 0 }
+
+  for (const r of diurnalRes.rows) {
+    if (r.time_slot === 'day') {
+      dayStats = {
+        avgTemp: Number(r.avg_temp ?? 0),
+        avgAqi: Math.round(Number(r.avg_aqi ?? 0)),
+        avgHumidity: Math.round(Number(r.avg_humidity ?? 0)),
+        hoursCount: Number(r.cnt ?? 0)
+      }
+    } else {
+      nightStats = {
+        avgTemp: Number(r.avg_temp ?? 0),
+        avgAqi: Math.round(Number(r.avg_aqi ?? 0)),
+        avgHumidity: Math.round(Number(r.avg_humidity ?? 0)),
+        hoursCount: Number(r.cnt ?? 0)
+      }
+    }
+  }
+
+  // 7. AQI Category Bracket Distribution
+  const aqiDistRes = await db.execute({
+    sql: `
+      SELECT 
+        COUNT(CASE WHEN us_aqi <= 50 THEN 1 END) as good_cnt,
+        COUNT(CASE WHEN us_aqi > 50 AND us_aqi <= 100 THEN 1 END) as mod_cnt,
+        COUNT(CASE WHEN us_aqi > 100 AND us_aqi <= 150 THEN 1 END) as sens_cnt,
+        COUNT(CASE WHEN us_aqi > 150 AND us_aqi <= 200 THEN 1 END) as unh_cnt,
+        COUNT(CASE WHEN us_aqi > 200 AND us_aqi <= 300 THEN 1 END) as v_unh_cnt,
+        COUNT(CASE WHEN us_aqi > 300 THEN 1 END) as haz_cnt,
+        COUNT(*) as total_cnt
+      FROM weather_aqi
+      WHERE city = ?;
+    `,
+    args: [city]
+  })
+
+  const dRow = aqiDistRes.rows[0]
+  const totalCnt = Number(dRow?.total_cnt ?? 1) || 1
+
+  const aqiDistribution = [
+    {
+      category: 'Good (0-50)',
+      level: 'good' as const,
+      count: Number(dRow?.good_cnt ?? 0),
+      percentage: Number(((Number(dRow?.good_cnt ?? 0) / totalCnt) * 100).toFixed(1)),
+      color: '#10b981',
+      badgeClass: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+    },
+    {
+      category: 'Moderate (51-100)',
+      level: 'moderate' as const,
+      count: Number(dRow?.mod_cnt ?? 0),
+      percentage: Number(((Number(dRow?.mod_cnt ?? 0) / totalCnt) * 100).toFixed(1)),
+      color: '#f59e0b',
+      badgeClass: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+    },
+    {
+      category: 'Sensitive Warning (101-150)',
+      level: 'unhealthy-sensitive' as const,
+      count: Number(dRow?.sens_cnt ?? 0),
+      percentage: Number(((Number(dRow?.sens_cnt ?? 0) / totalCnt) * 100).toFixed(1)),
+      color: '#f97316',
+      badgeClass: 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30'
+    },
+    {
+      category: 'Unhealthy (151-200)',
+      level: 'unhealthy' as const,
+      count: Number(dRow?.unh_cnt ?? 0),
+      percentage: Number(((Number(dRow?.unh_cnt ?? 0) / totalCnt) * 100).toFixed(1)),
+      color: '#ef4444',
+      badgeClass: 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30'
+    },
+    {
+      category: 'Very Unhealthy (201-300)',
+      level: 'very-unhealthy' as const,
+      count: Number(dRow?.v_unh_cnt ?? 0),
+      percentage: Number(((Number(dRow?.v_unh_cnt ?? 0) / totalCnt) * 100).toFixed(1)),
+      color: '#a855f7',
+      badgeClass: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30'
+    },
+    {
+      category: 'Hazardous (300+)',
+      level: 'hazardous' as const,
+      count: Number(dRow?.haz_cnt ?? 0),
+      percentage: Number(((Number(dRow?.haz_cnt ?? 0) / totalCnt) * 100).toFixed(1)),
+      color: '#be123c',
+      badgeClass: 'bg-rose-950/40 text-rose-500 dark:text-rose-400 border-rose-600/40'
+    }
+  ]
+
+  // 8. Chemical Pollutant Stats
+  const chemRes = await db.execute({
+    sql: `
+      SELECT 
+        ROUND(MIN(pm2_5), 1) as min_pm25, ROUND(MAX(pm2_5), 1) as max_pm25, ROUND(AVG(pm2_5), 1) as avg_pm25,
+        ROUND(MIN(pm10), 1) as min_pm10, ROUND(MAX(pm10), 1) as max_pm10, ROUND(AVG(pm10), 1) as avg_pm10,
+        ROUND(MIN(carbon_monoxide), 0) as min_co, ROUND(MAX(carbon_monoxide), 0) as max_co, ROUND(AVG(carbon_monoxide), 0) as avg_co,
+        ROUND(MIN(nitrogen_dioxide), 1) as min_no2, ROUND(MAX(nitrogen_dioxide), 1) as max_no2, ROUND(AVG(nitrogen_dioxide), 1) as avg_no2,
+        ROUND(MIN(sulphur_dioxide), 1) as min_so2, ROUND(MAX(sulphur_dioxide), 1) as max_so2, ROUND(AVG(sulphur_dioxide), 1) as avg_so2,
+        ROUND(MIN(ozone), 0) as min_o3, ROUND(MAX(ozone), 0) as max_o3, ROUND(AVG(ozone), 0) as avg_o3
+      FROM weather_aqi
+      WHERE city = ?;
+    `,
+    args: [city]
+  })
+  const ch = (chemRes.rows[0] || {}) as Record<string, any>
+
+  const avgPm25 = Number(ch.avg_pm25 ?? 0)
+  const avgPm10 = Number(ch.avg_pm10 ?? 0)
+  const avgCo = Number(ch.avg_co ?? 0)
+  const avgNo2 = Number(ch.avg_no2 ?? 0)
+  const avgSo2 = Number(ch.avg_so2 ?? 0)
+  const avgO3 = Number(ch.avg_o3 ?? 0)
+
+  const pollutantChemistry = [
+    {
+      pollutant: 'PM2.5',
+      name: 'Fine Particulate Matter',
+      unit: 'µg/m³',
+      min: Number(ch.min_pm25 ?? 0),
+      max: Number(ch.max_pm25 ?? 0),
+      avg: avgPm25,
+      whoLimit: 15,
+      status: avgPm25 <= 15 ? ('safe' as const) : avgPm25 <= 35 ? ('moderate' as const) : ('excess' as const)
+    },
+    {
+      pollutant: 'PM10',
+      name: 'Coarse Particulate Matter',
+      unit: 'µg/m³',
+      min: Number(ch.min_pm10 ?? 0),
+      max: Number(ch.max_pm10 ?? 0),
+      avg: avgPm10,
+      whoLimit: 45,
+      status: avgPm10 <= 45 ? ('safe' as const) : avgPm10 <= 100 ? ('moderate' as const) : ('excess' as const)
+    },
+    {
+      pollutant: 'CO',
+      name: 'Carbon Monoxide',
+      unit: 'µg/m³',
+      min: Number(ch.min_co ?? 0),
+      max: Number(ch.max_co ?? 0),
+      avg: avgCo,
+      whoLimit: 4000,
+      status: avgCo <= 4000 ? ('safe' as const) : ('excess' as const)
+    },
+    {
+      pollutant: 'NO₂',
+      name: 'Nitrogen Dioxide',
+      unit: 'µg/m³',
+      min: Number(ch.min_no2 ?? 0),
+      max: Number(ch.max_no2 ?? 0),
+      avg: avgNo2,
+      whoLimit: 25,
+      status: avgNo2 <= 25 ? ('safe' as const) : avgNo2 <= 50 ? ('moderate' as const) : ('excess' as const)
+    },
+    {
+      pollutant: 'SO₂',
+      name: 'Sulphur Dioxide',
+      unit: 'µg/m³',
+      min: Number(ch.min_so2 ?? 0),
+      max: Number(ch.max_so2 ?? 0),
+      avg: avgSo2,
+      whoLimit: 40,
+      status: avgSo2 <= 40 ? ('safe' as const) : ('excess' as const)
+    },
+    {
+      pollutant: 'O₃',
+      name: 'Ground-Level Ozone',
+      unit: 'µg/m³',
+      min: Number(ch.min_o3 ?? 0),
+      max: Number(ch.max_o3 ?? 0),
+      avg: avgO3,
+      whoLimit: 100,
+      status: avgO3 <= 100 ? ('safe' as const) : ('excess' as const)
+    }
+  ]
+
+  // Monthly overall summary
+  const mOverallAqi = monthlyRows.length > 0 ? Math.round(monthlyRows.reduce((acc, m) => acc + m.usAqi.avg, 0) / monthlyRows.length) : 0
+  const mOverallRain = monthlyRows.reduce((acc, m) => acc + m.totalRain, 0)
+  const mMinTemp = monthlyRows.length > 0 ? Math.min(...monthlyRows.map(m => m.temperature.min)) : 0
+  const mMaxTemp = monthlyRows.length > 0 ? Math.max(...monthlyRows.map(m => m.temperature.max)) : 0
+  const mAvgTemp = monthlyRows.length > 0 ? Number((monthlyRows.reduce((acc, m) => acc + m.temperature.avg, 0) / monthlyRows.length).toFixed(1)) : 0
+
+  // Yearly overall summary
+  const yOverallAqi = yearlyRows.length > 0 ? Math.round(yearlyRows.reduce((acc, y) => acc + y.usAqi.avg, 0) / yearlyRows.length) : 0
+  const yOverallRain = yearlyRows.reduce((acc, y) => acc + y.totalRain, 0)
+  const yMinTemp = yearlyRows.length > 0 ? Math.min(...yearlyRows.map(y => y.temperature.min)) : 0
+  const yMaxTemp = yearlyRows.length > 0 ? Math.max(...yearlyRows.map(y => y.temperature.max)) : 0
+  const yAvgTemp = yearlyRows.length > 0 ? Number((yearlyRows.reduce((acc, y) => acc + y.temperature.avg, 0) / yearlyRows.length).toFixed(1)) : 0
+
+  return {
+    city: String(meta.city),
+    state: String(meta.state),
+    totalReadings: Number(meta.cnt ?? 0),
+    firstReading: String(meta.first_ts ?? ''),
+    lastReading: String(meta.last_ts ?? ''),
+    sevenDays: {
+      summary: {
+        temperature: {
+          min: Number(Number(s7.min_temp ?? 0).toFixed(1)),
+          max: Number(Number(s7.max_temp ?? 0).toFixed(1)),
+          avg: Number(Number(s7.avg_temp ?? 0).toFixed(1))
+        },
+        apparentTemperature: {
+          min: Number(Number(s7.min_feels ?? 0).toFixed(1)),
+          max: Number(Number(s7.max_feels ?? 0).toFixed(1)),
+          avg: Number(Number(s7.avg_feels ?? 0).toFixed(1))
+        },
+        usAqi: {
+          min: Math.round(Number(s7.min_aqi ?? 0)),
+          max: Math.round(Number(s7.max_aqi ?? 0)),
+          avg: s7AvgAqi
+        },
+        aqiCategory: getAqiCategoryInfo(s7AvgAqi),
+        pm25: {
+          min: Number(Number(s7.min_pm25 ?? 0).toFixed(1)),
+          max: Number(Number(s7.max_pm25 ?? 0).toFixed(1)),
+          avg: Number(Number(s7.avg_pm25 ?? 0).toFixed(1))
+        },
+        pm10: {
+          min: Number(Number(s7.min_pm10 ?? 0).toFixed(1)),
+          max: Number(Number(s7.max_pm10 ?? 0).toFixed(1)),
+          avg: Number(Number(s7.avg_pm10 ?? 0).toFixed(1))
+        },
+        humidity: {
+          min: Math.round(Number(s7.min_humidity ?? 0)),
+          max: Math.round(Number(s7.max_humidity ?? 0)),
+          avg: Math.round(Number(s7.avg_humidity ?? 0))
+        },
+        windSpeed: {
+          min: Number(Number(s7.min_wind ?? 0).toFixed(1)),
+          max: Number(Number(s7.max_wind ?? 0).toFixed(1)),
+          avg: Number(Number(s7.avg_wind ?? 0).toFixed(1))
+        },
+        totalRain: Number(Number(s7.total_rain ?? 0).toFixed(1))
+      },
+      days: sevenDaysRows
+    },
+    monthly: {
+      summary: {
+        temperature: { min: mMinTemp, max: mMaxTemp, avg: mAvgTemp },
+        usAqi: {
+          min: monthlyRows.length > 0 ? Math.min(...monthlyRows.map(m => m.usAqi.min)) : 0,
+          max: monthlyRows.length > 0 ? Math.max(...monthlyRows.map(m => m.usAqi.max)) : 0,
+          avg: mOverallAqi
+        },
+        aqiCategory: getAqiCategoryInfo(mOverallAqi),
+        totalRain: Number(mOverallRain.toFixed(1))
+      },
+      months: monthlyRows
+    },
+    yearly: {
+      summary: {
+        temperature: { min: yMinTemp, max: yMaxTemp, avg: yAvgTemp },
+        usAqi: {
+          min: yearlyRows.length > 0 ? Math.min(...yearlyRows.map(y => y.usAqi.min)) : 0,
+          max: yearlyRows.length > 0 ? Math.max(...yearlyRows.map(y => y.usAqi.max)) : 0,
+          avg: yOverallAqi
+        },
+        aqiCategory: getAqiCategoryInfo(yOverallAqi),
+        totalRain: Number(yOverallRain.toFixed(1))
+      },
+      years: yearlyRows
+    },
+    records: {
+      hottest: {
+        temperature: hotRow ? Number(Number(hotRow.temperature).toFixed(1)) : 0,
+        feelsLike: hotRow ? Number(Number(hotRow.apparent_temperature).toFixed(1)) : 0,
+        date: hotRow ? String(hotRow.timestamp_local || hotRow.timestamp_utc) : ''
+      },
+      coldest: {
+        temperature: coldRow ? Number(Number(coldRow.temperature).toFixed(1)) : 0,
+        date: coldRow ? String(coldRow.timestamp_local || coldRow.timestamp_utc) : ''
+      },
+      highestAqi: {
+        aqi: maxAqiVal,
+        date: highAqiRow ? String(highAqiRow.timestamp_local || highAqiRow.timestamp_utc) : '',
+        category: getAqiCategoryInfo(maxAqiVal)
+      },
+      lowestAqi: {
+        aqi: minAqiVal,
+        date: lowAqiRow ? String(lowAqiRow.timestamp_local || lowAqiRow.timestamp_utc) : '',
+        category: getAqiCategoryInfo(minAqiVal)
+      },
+      wettestDay: {
+        rain: rainRow ? Number(Number(rainRow.precipitation).toFixed(1)) : 0,
+        date: rainRow ? String(rainRow.timestamp_local || rainRow.timestamp_utc) : ''
+      },
+      maxWind: {
+        wind: windRow ? Number(Number(windRow.wind_speed).toFixed(1)) : 0,
+        date: windRow ? String(windRow.timestamp_local || windRow.timestamp_utc) : ''
+      }
+    },
+    diurnal: {
+      daytime: dayStats,
+      nighttime: nightStats,
+      tempVariance: Number((dayStats.avgTemp - nightStats.avgTemp).toFixed(1)),
+      aqiVariance: dayStats.avgAqi - nightStats.avgAqi
+    },
+    aqiDistribution,
+    pollutantChemistry
+  }
 }

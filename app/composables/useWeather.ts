@@ -2,7 +2,8 @@ import { ref, computed } from 'vue'
 import type {
   CityLatestWeather,
   NationalWeatherPulse,
-  WeatherHistoryResponse
+  WeatherHistoryResponse,
+  CityWeatherStats
 } from '~/types/weather'
 
 export function useWeather() {
@@ -10,9 +11,11 @@ export function useWeather() {
   const pulse = useState<NationalWeatherPulse | null>('weather_pulse', () => null)
   const selectedCity = useState<CityLatestWeather | null>('weather_selected_city', () => null)
   const historyData = useState<WeatherHistoryResponse | null>('weather_history', () => null)
+  const statsData = useState<CityWeatherStats | null>('weather_stats', () => null)
 
   const isLoading = ref(false)
   const isHistoryLoading = ref(false)
+  const isStatsLoading = ref(false)
   const isModalOpen = ref(false)
   const error = ref<string | null>(null)
 
@@ -57,10 +60,25 @@ export function useWeather() {
     }
   }
 
+  async function fetchCityStats(cityName: string) {
+    try {
+      isStatsLoading.value = true
+      const res: any = await $fetch(`/api/weather/stats?city=${encodeURIComponent(cityName)}`)
+      if (res.success && res.data) {
+        statsData.value = res.data
+      }
+    } catch (err: any) {
+      console.error('Failed to load city stats:', err)
+    } finally {
+      isStatsLoading.value = false
+    }
+  }
+
   function openCityModal(city: CityLatestWeather) {
     selectedCity.value = city
     isModalOpen.value = true
     fetchCityHistory(city.city, selectedRange.value)
+    fetchCityStats(city.city)
   }
 
   function closeCityModal() {
@@ -165,8 +183,10 @@ export function useWeather() {
     pulse,
     selectedCity,
     historyData,
+    statsData,
     isLoading,
     isHistoryLoading,
+    isStatsLoading,
     isModalOpen,
     error,
     searchQuery,
@@ -179,6 +199,7 @@ export function useWeather() {
     filteredCities,
     fetchLatest,
     fetchCityHistory,
+    fetchCityStats,
     openCityModal,
     closeCityModal,
     changeRange,

@@ -399,14 +399,14 @@ function initMainChart() {
       timeVisible: false
     },
     handleScroll: {
-      mouseWheel: true,
+      mouseWheel: false,
       pressedMouseMove: true,
       horzTouchDrag: true,
       vertTouchDrag: false
     },
     handleScale: {
       axisPressedMouseMove: true,
-      mouseWheel: true,
+      mouseWheel: false,
       pinch: true
     }
   })
@@ -507,6 +507,17 @@ function initOscChart() {
       rightOffset: 6,
       barSpacing: 8,
       visible: true
+    },
+    handleScroll: {
+      mouseWheel: false,
+      pressedMouseMove: true,
+      horzTouchDrag: true,
+      vertTouchDrag: false
+    },
+    handleScale: {
+      axisPressedMouseMove: true,
+      mouseWheel: false,
+      pinch: true
     }
   })
 

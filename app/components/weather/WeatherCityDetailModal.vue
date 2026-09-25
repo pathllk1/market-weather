@@ -1,15 +1,21 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { CityLatestWeather, WeatherHistoryResponse, WeatherHistoryPoint } from '~/types/weather'
+import type { CityLatestWeather, WeatherHistoryResponse, WeatherHistoryPoint, CityWeatherStats } from '~/types/weather'
 import WeatherAqiBadge from './WeatherAqiBadge.vue'
+import WeatherCityStatsTab from './WeatherCityStatsTab.vue'
 
 const props = defineProps<{
   open: boolean
   city: CityLatestWeather | null
   history: WeatherHistoryResponse | null
+  stats?: CityWeatherStats | null
   isLoading?: boolean
+  isStatsLoading?: boolean
   selectedRange: '24h' | '7d' | '30d' | '90d' | 'all'
 }>()
+
+// Active Modal Tab: Default to 'analytics' as requested by the user
+const activeModalTab = ref<'analytics' | 'telemetry'>('analytics')
 
 const emit = defineEmits<{
   (e: 'update:open', val: boolean): void
@@ -221,8 +227,65 @@ function handleSvgMouseLeave() {
         v-if="props.city"
         class="space-y-6"
       >
-        <!-- Metric Cards Row -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <!-- Modal Tab Switcher Bar -->
+        <div class="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 pb-3">
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all select-none"
+              :class="activeModalTab === 'analytics'
+                ? 'bg-primary text-white shadow-md'
+                : 'bg-neutral-100 dark:bg-neutral-800/80 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'"
+              @click="activeModalTab = 'analytics'"
+            >
+              <UIcon
+                name="i-lucide-bar-chart-3"
+                class="h-4 w-4"
+              />
+              <span>Analytics & History (Min / Max / Avg)</span>
+              <UBadge
+                color="primary"
+                variant="subtle"
+                size="xs"
+                class="text-[9px] px-1 py-0"
+              >
+                Default
+              </UBadge>
+            </button>
+
+            <button
+              type="button"
+              class="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all select-none"
+              :class="activeModalTab === 'telemetry'
+                ? 'bg-primary text-white shadow-md'
+                : 'bg-neutral-100 dark:bg-neutral-800/80 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'"
+              @click="activeModalTab = 'telemetry'"
+            >
+              <UIcon
+                name="i-lucide-activity"
+                class="h-4 w-4"
+              />
+              <span>Live Telemetry & Curves</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- TAB 1 (DEFAULT): HISTORICAL ANALYTICS (MIN / MAX / AVG) -->
+        <div v-show="activeModalTab === 'analytics'">
+          <WeatherCityStatsTab
+            :stats="props.stats ?? null"
+            :is-loading="props.isStatsLoading"
+            :city="props.city"
+          />
+        </div>
+
+        <!-- TAB 2: LIVE TELEMETRY & HISTORICAL CURVES (PRESERVED) -->
+        <div
+          v-show="activeModalTab === 'telemetry'"
+          class="space-y-6"
+        >
+          <!-- Metric Cards Row -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div class="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700/60 shadow-xs">
             <div class="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
               Temperature
@@ -751,6 +814,7 @@ function handleSvgMouseLeave() {
           </div>
         </div>
       </div>
-    </template>
-  </UModal>
+    </div>
+  </template>
+</UModal>
 </template>

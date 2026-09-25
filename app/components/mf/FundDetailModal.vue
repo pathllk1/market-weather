@@ -94,6 +94,17 @@ function renderChart() {
       barSpacing: 10,
       minBarSpacing: 3,
       fixLeftEdge: true
+    },
+    handleScroll: {
+      mouseWheel: false,
+      pressedMouseMove: true,
+      horzTouchDrag: true,
+      vertTouchDrag: false
+    },
+    handleScale: {
+      axisPressedMouseMove: true,
+      mouseWheel: false,
+      pinch: true
     }
   })
 

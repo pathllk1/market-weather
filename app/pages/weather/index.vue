@@ -19,8 +19,10 @@ const {
   pulse,
   selectedCity,
   historyData,
+  statsData,
   isLoading,
   isHistoryLoading,
+  isStatsLoading,
   isModalOpen,
   error,
   searchQuery,
@@ -195,7 +197,9 @@ function handleSelectCityByName(cityName: string) {
       :open="isModalOpen"
       :city="selectedCity"
       :history="historyData"
+      :stats="statsData"
       :is-loading="isHistoryLoading"
+      :is-stats-loading="isStatsLoading"
       :selected-range="selectedRange"
       @update:open="isModalOpen = $event"
       @change-range="changeRange"
