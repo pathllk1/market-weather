@@ -3,7 +3,8 @@ import type {
   CityLatestWeather,
   NationalWeatherPulse,
   WeatherHistoryResponse,
-  CityWeatherStats
+  CityWeatherStats,
+  NationalHourlyTrendPoint
 } from '~/types/weather'
 
 export function useWeather() {
@@ -12,10 +13,12 @@ export function useWeather() {
   const selectedCity = useState<CityLatestWeather | null>('weather_selected_city', () => null)
   const historyData = useState<WeatherHistoryResponse | null>('weather_history', () => null)
   const statsData = useState<CityWeatherStats | null>('weather_stats', () => null)
+  const nationalTrends = useState<NationalHourlyTrendPoint[]>('weather_national_trends', () => [])
 
   const isLoading = ref(false)
   const isHistoryLoading = ref(false)
   const isStatsLoading = ref(false)
+  const isTrendsLoading = ref(false)
   const isModalOpen = ref(false)
   const error = ref<string | null>(null)
 
@@ -178,15 +181,31 @@ export function useWeather() {
     }
   }
 
+  async function fetchNationalTrends(hours = 24) {
+    try {
+      isTrendsLoading.value = true
+      const res: any = await $fetch(`/api/weather/national-trend?hours=${hours}`)
+      if (res.success && res.data) {
+        nationalTrends.value = res.data
+      }
+    } catch (err: any) {
+      console.error('Failed to load national trends:', err)
+    } finally {
+      isTrendsLoading.value = false
+    }
+  }
+
   return {
     cities,
     pulse,
     selectedCity,
     historyData,
     statsData,
+    nationalTrends,
     isLoading,
     isHistoryLoading,
     isStatsLoading,
+    isTrendsLoading,
     isModalOpen,
     error,
     searchQuery,
@@ -200,6 +219,7 @@ export function useWeather() {
     fetchLatest,
     fetchCityHistory,
     fetchCityStats,
+    fetchNationalTrends,
     openCityModal,
     closeCityModal,
     changeRange,

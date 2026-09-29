@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useWeather } from '~/composables/useWeather'
+import WeatherDashboardTab from '~/components/weather/WeatherDashboardTab.vue'
 import WeatherPulseRibbon from '~/components/weather/WeatherPulseRibbon.vue'
 import WeatherCityTable from '~/components/weather/WeatherCityTable.vue'
 import WeatherCityDetailModal from '~/components/weather/WeatherCityDetailModal.vue'
@@ -11,8 +12,8 @@ definePageMeta({
   layout: 'default'
 })
 
-// Tab navigation: 'matrix' (Live Matrix & Directory) | 'comparison' (Multi-City Comparator)
-const activeTab = ref<'matrix' | 'comparison'>('matrix')
+// Tab navigation: 'dashboard' (Executive Overview) | 'matrix' (Live Matrix & Directory) | 'comparison' (Multi-City Comparator)
+const activeTab = ref<'dashboard' | 'matrix' | 'comparison'>('dashboard')
 
 const {
   cities,
@@ -20,9 +21,11 @@ const {
   selectedCity,
   historyData,
   statsData,
+  nationalTrends,
   isLoading,
   isHistoryLoading,
   isStatsLoading,
+  isTrendsLoading,
   isModalOpen,
   error,
   searchQuery,
@@ -34,6 +37,7 @@ const {
   availableStates,
   filteredCities,
   fetchLatest,
+  fetchNationalTrends,
   openCityModal,
   changeRange,
   toggleSort
@@ -42,6 +46,9 @@ const {
 onMounted(async () => {
   if (cities.value.length === 0) {
     await fetchLatest()
+  }
+  if (nationalTrends.value.length === 0) {
+    await fetchNationalTrends(24)
   }
 })
 
@@ -53,6 +60,16 @@ function handleSelectCityByName(cityName: string) {
     openCityModal(found)
   }
 }
+
+function handleJumpToMatrix(filter?: { aqiFilter?: 'ALL' | 'GOOD' | 'MODERATE' | 'POOR' | 'SEVERE' | 'RAIN'; state?: string }) {
+  if (filter?.aqiFilter) {
+    aqiFilter.value = filter.aqiFilter
+  }
+  if (filter?.state) {
+    selectedState.value = filter.state
+  }
+  activeTab.value = 'matrix'
+}
 </script>
 
 <template>
@@ -60,6 +77,29 @@ function handleSelectCityByName(cityName: string) {
     <!-- Tab Navigation Bar -->
     <div class="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 pb-3">
       <div class="flex items-center gap-2">
+        <!-- TAB 1: EXECUTIVE DASHBOARD (DEFAULT) -->
+        <button
+          type="button"
+          class="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all select-none"
+          :class="activeTab === 'dashboard' ? 'bg-primary text-white shadow-md' : 'bg-neutral-100 dark:bg-neutral-800/80 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'"
+          @click="activeTab = 'dashboard'"
+        >
+          <UIcon
+            name="i-lucide-layout-dashboard"
+            class="h-4 w-4"
+          />
+          <span>Executive Overview</span>
+          <UBadge
+            color="primary"
+            variant="subtle"
+            size="xs"
+            class="text-[9px] px-1 py-0"
+          >
+            Live
+          </UBadge>
+        </button>
+
+        <!-- TAB 2: LIVE MATRIX DIRECTORY -->
         <button
           type="button"
           class="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all select-none"
@@ -67,7 +107,7 @@ function handleSelectCityByName(cityName: string) {
           @click="activeTab = 'matrix'"
         >
           <UIcon
-            name="i-lucide-layout-grid"
+            name="i-lucide-table"
             class="h-4 w-4"
           />
           <span>Live Weather & Matrix</span>
@@ -77,6 +117,7 @@ function handleSelectCityByName(cityName: string) {
           >({{ cities.length }} Cities)</span>
         </button>
 
+        <!-- TAB 3: CITY COMPARISON -->
         <button
           type="button"
           class="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all select-none"
@@ -88,16 +129,27 @@ function handleSelectCityByName(cityName: string) {
             class="h-4 w-4"
           />
           <span>City Comparison</span>
-          <UBadge
-            color="primary"
-            variant="subtle"
-            size="xs"
-            class="text-[9px] px-1 py-0"
-          >
-            New
-          </UBadge>
         </button>
       </div>
+    </div>
+
+    <!-- TAB 1: EXECUTIVE DASHBOARD (DEFAULT VIEW) -->
+    <div
+      v-show="activeTab === 'dashboard'"
+      class="space-y-4"
+    >
+      <WeatherDashboardTab
+        :cities="cities"
+        :pulse="pulse"
+        :national-trends="nationalTrends"
+        :is-loading="isLoading"
+        :is-trends-loading="isTrendsLoading"
+        @select-city="openCityModal"
+        @select-city-by-name="handleSelectCityByName"
+        @refresh="fetchLatest(true)"
+        @jump-to-matrix="handleJumpToMatrix"
+        @change-trends-hours="fetchNationalTrends"
+      />
     </div>
 
     <!-- TAB 1: EXISTING LIVE WEATHER MATRIX & DIRECTORY (PRESERVED) -->

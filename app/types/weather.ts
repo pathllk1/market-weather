@@ -129,6 +129,15 @@ export interface WeatherRankingsResponse {
   wettestCities: Array<{ city: string; state: string; precipitation: number }>
 }
 
+export interface NationalHourlyTrendPoint {
+  hourSlot: string
+  avgAqi: number
+  avgTemp: number
+  avgHumidity: number
+  reportingCities: number
+  sampleCount: number
+}
+
 export interface MarketWeatherSectorImpact {
   sector: string
   metric: string

@@ -8,6 +8,7 @@ import type {
   WeatherHistoryResponse,
   WeatherHistoryPoint,
   WeatherRankingsResponse,
+  NationalHourlyTrendPoint,
   MarketWeatherSectorImpact,
   CityWeatherStats,
   PeriodAggregatedRow,
@@ -456,6 +457,56 @@ export async function getWeatherRankings(): Promise<WeatherRankingsResponse> {
       precipitation: c.precipitation
     }))
   }
+}
+
+let cachedTrends: {
+  points: NationalHourlyTrendPoint[]
+  hours: number
+  cachedAt: number
+} | null = null
+
+export async function getNationalHourlyTrends(hours = 24): Promise<NationalHourlyTrendPoint[]> {
+  const now = Date.now()
+  if (cachedTrends && cachedTrends.hours === hours && now - cachedTrends.cachedAt < SNAPSHOT_CACHE_MS) {
+    return cachedTrends.points
+  }
+
+  const db = getTursoClient()
+  const clampedHours = Math.min(Math.max(Number(hours) || 24, 6), 72)
+  const res = await db.execute({
+    sql: `
+      SELECT 
+        strftime('%Y-%m-%d %H:00', timestamp_utc) as hour_slot,
+        ROUND(AVG(us_aqi), 1) as avg_aqi,
+        ROUND(AVG(temperature), 1) as avg_temp,
+        ROUND(AVG(relative_humidity), 1) as avg_humidity,
+        COUNT(DISTINCT city) as reporting_cities,
+        COUNT(*) as sample_count
+      FROM weather_aqi
+      GROUP BY hour_slot
+      ORDER BY hour_slot DESC
+      LIMIT ?;
+    `,
+    args: [clampedHours]
+  })
+
+  // Reverse so it is chronologically ascending (oldest -> newest)
+  const points: NationalHourlyTrendPoint[] = res.rows.map(r => ({
+    hourSlot: String(r.hour_slot),
+    avgAqi: Number(r.avg_aqi ?? 0),
+    avgTemp: Number(r.avg_temp ?? 0),
+    avgHumidity: Number(r.avg_humidity ?? 0),
+    reportingCities: Number(r.reporting_cities ?? 0),
+    sampleCount: Number(r.sample_count ?? 0)
+  })).reverse()
+
+  cachedTrends = {
+    points,
+    hours,
+    cachedAt: now
+  }
+
+  return points
 }
 
 export async function getWeatherMarketCorrelations(): Promise<MarketWeatherSectorImpact[]> {
