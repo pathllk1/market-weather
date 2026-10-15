@@ -38,11 +38,11 @@ const emit = defineEmits<{
               size="xs"
               class="font-mono text-[10px]"
             >
-              51 Cities Live
+              {{ props.pulse.totalCities }} Cities Live
             </UBadge>
           </div>
           <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-            Hourly atmospheric telemetry across 24 Indian States & Territories
+            Hourly atmospheric telemetry across {{ props.pulse.totalStates ? `${props.pulse.totalStates} ` : '' }}Indian States & Territories
           </p>
         </div>
       </div>
@@ -94,7 +94,7 @@ const emit = defineEmits<{
             />
           </div>
           <p class="text-[11px] text-neutral-500 dark:text-neutral-400">
-            Across 51 major metropolitan clusters
+            Across {{ props.pulse.totalCities }} major metropolitan clusters
           </p>
         </div>
       </div>

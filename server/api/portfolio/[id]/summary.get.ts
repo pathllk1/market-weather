@@ -156,8 +156,8 @@ export default defineEventHandler(async (event) => {
         const dAcc = dematMap.get(dId)
         return {
           dematId: dId,
-          accountName: dAcc ? dAcc.accountName : (dematAccounts[0]?.accountName || 'Primary Demat'),
-          brokerName: dAcc ? dAcc.brokerName : (dematAccounts[0]?.brokerName || 'Zerodha'),
+          accountName: dAcc ? dAcc.accountName : (dematAccounts.find(d => d.id === dId)?.accountName || 'Unassigned Account'),
+          brokerName: dAcc ? dAcc.brokerName : (dematAccounts.find(d => d.id === dId)?.brokerName || 'Unassigned'),
           quantity: data.qty,
           avgCost: data.qty > 0 ? Number((data.cost / data.qty).toFixed(2)) : currentPrice,
           currentValue: Number((data.qty * currentPrice).toFixed(2))
@@ -185,7 +185,7 @@ export default defineEventHandler(async (event) => {
       marketCapCategory: meta?.cap || 'Mid Cap',
       targetPrice: targetRow?.target_price ? Number(targetRow.target_price) : null,
       stopLoss: targetRow?.stop_loss ? Number(targetRow.stop_loss) : null,
-      overallScore: tech?.overall_score ? Number(tech.overall_score) : 50,
+      overallScore: tech?.overall_score !== undefined && tech.overall_score !== null ? Number(tech.overall_score) : undefined,
       dematBreakdown
     })
   }

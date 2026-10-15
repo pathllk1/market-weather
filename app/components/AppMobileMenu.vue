@@ -52,7 +52,7 @@ const navItems = computed(() => {
     {
       to: '/weather',
       label: 'Weather & AQI',
-      description: 'National air quality & 51-city matrix',
+      description: 'National air quality & city matrix',
       icon: 'i-lucide-cloud-sun'
     },
     {

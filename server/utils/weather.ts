@@ -239,9 +239,11 @@ export async function getLatestWeatherSnapshots(forceRefresh = false): Promise<{
   const avgAqi = Math.round(sumAqi / cities.length)
   const latestTs = firstCity.timestampUtc
   const latestLocal = firstCity.timestampLocal
+  const totalStates = new Set(cities.map(c => c.state).filter(Boolean)).size
 
   const pulse: NationalWeatherPulse = {
     totalCities: cities.length,
+    totalStates,
     totalReadings,
     lastUpdatedUtc: latestTs,
     lastUpdatedLocal: latestLocal,
@@ -515,15 +517,20 @@ export async function getWeatherMarketCorrelations(): Promise<MarketWeatherSecto
     const snapshot = await getLatestWeatherSnapshots()
     pulse = snapshot.pulse
   } catch (err) {
-    console.warn('[Weather correlations] Failed to fetch live snapshot:', err)
+    console.warn('[Weather correlations] Failed to fetch live snapshot from database:', err)
+    return []
   }
 
-  const hottestTemp = pulse?.hottestCity?.temperature ? `${pulse.hottestCity.temperature}°C` : 'elevated temperatures'
-  const hottestCityName = pulse?.hottestCity?.city || 'northern plains'
-  const rainCitiesCount = pulse?.activeRainCount || 0
-  const maxRainCity = pulse?.highestRainCity ? `${pulse.highestRainCity.city} (${pulse.highestRainCity.precipitation}mm)` : null
-  const mostPollutedCityName = pulse?.mostPollutedCity?.city || 'NCR'
-  const maxAqi = pulse?.mostPollutedCity?.aqi ? pulse.mostPollutedCity.aqi : 150
+  if (!pulse || !pulse.hottestCity || !pulse.mostPollutedCity) {
+    return []
+  }
+
+  const hottestTemp = `${pulse.hottestCity.temperature}°C`
+  const hottestCityName = pulse.hottestCity.city
+  const rainCitiesCount = pulse.activeRainCount
+  const maxRainCity = pulse.highestRainCity ? `${pulse.highestRainCity.city} (${pulse.highestRainCity.precipitation}mm)` : null
+  const mostPollutedCityName = pulse.mostPollutedCity.city
+  const maxAqi = pulse.mostPollutedCity.aqi
 
   return [
     {
@@ -542,7 +549,7 @@ export async function getWeatherMarketCorrelations(): Promise<MarketWeatherSecto
     {
       sector: 'Power & Energy Generation',
       metric: `Peak Heat Index: ${hottestTemp}`,
-      status: pulse?.hottestCity?.temperature && pulse.hottestCity.temperature >= 35 ? 'positive' : 'watch',
+      status: pulse.hottestCity.temperature >= 35 ? 'positive' : 'watch',
       summary: `Peak temperatures reaching ${hottestTemp} in ${hottestCityName} drive institutional cooling loads and grid power demand.`,
       stocks: [
         { symbol: 'TATAPOWER.NS', name: 'Tata Power', correlationFactor: 'Discom peak load demand' },

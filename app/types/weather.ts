@@ -55,6 +55,7 @@ export interface CityLatestWeather extends WeatherAqiReading {
 
 export interface NationalWeatherPulse {
   totalCities: number
+  totalStates?: number
   totalReadings: number
   lastUpdatedUtc: string
   lastUpdatedLocal: string

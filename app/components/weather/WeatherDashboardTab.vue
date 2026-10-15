@@ -419,7 +419,7 @@ const maxStateAqi = computed(() => {
             </UBadge>
           </div>
           <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
-            <span>Synchronized with 51 official automated telemetry stations</span>
+            <span>Synchronized with {{ props.cities.length || props.pulse?.totalCities || 0 }} official automated telemetry stations</span>
             <span class="opacity-40">•</span>
             <span v-if="props.pulse">Last synced: {{ props.pulse.lastUpdatedLocal }}</span>
           </p>
@@ -437,7 +437,7 @@ const maxStateAqi = computed(() => {
             name="i-lucide-table"
             class="h-3.5 w-3.5 text-primary"
           />
-          <span>Browse 51 Cities Matrix</span>
+          <span>Browse Matrix ({{ props.cities.length }})</span>
         </button>
 
         <UButton
@@ -627,7 +627,7 @@ const maxStateAqi = computed(() => {
             size="xs"
             class="text-[9px] font-mono"
           >
-            51/51 Active
+            {{ props.cities.length }}/{{ props.cities.length }} Active
           </UBadge>
         </div>
 
@@ -673,7 +673,7 @@ const maxStateAqi = computed(() => {
               <span>Atmospheric Health Distribution</span>
             </h3>
             <p class="text-xs text-neutral-400 mt-0.5">
-              Live categorization of all 51 monitored cities
+              Live categorization of all {{ props.cities.length }} monitored cities
             </p>
           </div>
           <UBadge

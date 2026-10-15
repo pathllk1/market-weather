@@ -1,4 +1,5 @@
-import { fetchDirectYahooQuote, getLiveQuotes } from '../../utils/yahoo'
+import { fetchDirectYahooQuote } from '../../utils/yahoo'
+import { getTursoClient } from '../../utils/turso'
 
 export interface LiveIndexData {
   symbol: string
@@ -40,13 +41,6 @@ const INDICES_CONFIG = [
   { symbol: '^CNXIT', displayName: 'NIFTY IT', shortName: 'NIFTY IT' },
   { symbol: '^INDIAVIX', displayName: 'INDIA VIX', shortName: 'VIX' },
   { symbol: '^BSESN', displayName: 'S&P BSE SENSEX', shortName: 'SENSEX' }
-]
-
-const NIFTY_MOVERS_UNIVERSE = [
-  'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'INFY.NS', 'ICICIBANK.NS',
-  'BHARTIARTL.NS', 'SBIN.NS', 'ITC.NS', 'HINDUNILVR.NS', 'LT.NS',
-  'BAJFINANCE.NS', 'KOTAKBANK.NS', 'AXISBANK.NS', 'MARUTI.NS', 'SUNPHARMA.NS',
-  'TITAN.NS', 'ULTRACEMCO.NS', 'TATASTEEL.NS', 'NTPC.NS', 'POWERGRID.NS'
 ]
 
 interface CacheEntry {
@@ -110,35 +104,46 @@ export default defineEventHandler(async (): Promise<LiveIndicesApiResponse> => {
 
     const validIndices = rawQuotes.filter((item): item is LiveIndexData => item !== null)
 
-    // Fetch live movers using crumb-free getLiveQuotes (with Turso DB fallback)
+    // Fetch live movers purely dynamically from technical_analysis database
     let gainers: LiveMoverItem[] = []
     let losers: LiveMoverItem[] = []
 
     try {
-      const liveQuotes = await getLiveQuotes(NIFTY_MOVERS_UNIVERSE)
-      const moverItems: LiveMoverItem[] = []
+      const db = getTursoClient()
+      const [gainersRes, losersRes] = await Promise.all([
+        db.execute(`
+          SELECT symbol, company_name, current_price, price_change, percentage_change
+          FROM technical_analysis
+          WHERE percentage_change > 0
+          ORDER BY percentage_change DESC
+          LIMIT 5;
+        `),
+        db.execute(`
+          SELECT symbol, company_name, current_price, price_change, percentage_change
+          FROM technical_analysis
+          WHERE percentage_change < 0
+          ORDER BY percentage_change ASC
+          LIMIT 5;
+        `)
+      ])
 
-      for (const s of NIFTY_MOVERS_UNIVERSE) {
-        const cleanSym = s.replace('.NS', '')
-        const q = liveQuotes[s] || liveQuotes[cleanSym]
-        if (q && q.price > 0) {
-          moverItems.push({
-            symbol: cleanSym,
-            name: cleanSym,
-            price: Number(q.price.toFixed(2)),
-            change: Number(q.change.toFixed(2)),
-            changePercent: Number(q.changePercent.toFixed(2))
-          })
-        }
-      }
+      gainers = gainersRes.rows.map(r => ({
+        symbol: String(r.symbol).replace(/\.(NS|BO)$/i, ''),
+        name: String(r.company_name || r.symbol).replace(/\.(NS|BO)$/i, ''),
+        price: Number(Number(r.current_price || 0).toFixed(2)),
+        change: Number(Number(r.price_change || 0).toFixed(2)),
+        changePercent: Number(Number(r.percentage_change || 0).toFixed(2))
+      }))
 
-      if (moverItems.length > 0) {
-        moverItems.sort((a, b) => b.changePercent - a.changePercent)
-        gainers = moverItems.slice(0, 5)
-        losers = moverItems.slice(-5).reverse()
-      }
+      losers = losersRes.rows.map(r => ({
+        symbol: String(r.symbol).replace(/\.(NS|BO)$/i, ''),
+        name: String(r.company_name || r.symbol).replace(/\.(NS|BO)$/i, ''),
+        price: Number(Number(r.current_price || 0).toFixed(2)),
+        change: Number(Number(r.price_change || 0).toFixed(2)),
+        changePercent: Number(Number(r.percentage_change || 0).toFixed(2))
+      }))
     } catch (mErr) {
-      console.warn('[live-indices] Error fetching movers:', mErr)
+      console.warn('[live-indices] Error fetching database movers:', mErr)
     }
 
     const payload = {

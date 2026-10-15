@@ -61,7 +61,7 @@ onBeforeUnmount(() => {
             </span>
           </div>
           <p class="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
-            Real-time performance across the 8 key NSE sectors and their 5 leading equities
+            Real-time performance across {{ sectors.length ? `${sectors.length} key NSE sectors` : 'key NSE sectors' }} and leading equities
           </p>
         </div>
       </div>
@@ -104,7 +104,7 @@ onBeforeUnmount(() => {
         <div class="flex items-center gap-2">
           <span class="font-black uppercase text-[11px] text-neutral-900 dark:text-white flex items-center gap-1.5">
             <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5 text-primary" />
-            <span>Market Breadth (40 Key Heavyweights)</span>
+            <span>Market Breadth ({{ breadth.total }} Key Heavyweights)</span>
           </span>
           <span
             class="text-[9px] font-bold font-mono px-2 py-0.5 rounded-full"
