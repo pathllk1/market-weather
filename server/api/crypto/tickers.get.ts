@@ -1,5 +1,5 @@
-import { defineEventHandler, getQuery, createError } from 'h3'
-import { getLiveCryptoTickers } from '../../utils/crypto-service'
+import { defineEventHandler, getQuery } from 'h3'
+import { getLiveCryptoTickers, getFallbackSeedTickers, getLiveInrRates } from '../../utils/crypto-service'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -15,10 +15,24 @@ export default defineEventHandler(async (event) => {
       timestamp: Date.now()
     }
   } catch (err: unknown) {
-    const error = err as Error
-    throw createError({
-      statusCode: 502,
-      statusMessage: error.message || 'Failed to fetch live crypto tickers'
-    })
+    console.error('Crypto tickers endpoint graceful fallback triggered:', err)
+    const inrRates = await getLiveInrRates().catch(() => ({
+      domesticRate: 101.25,
+      forexRate: 95.00,
+      activeRate: 101.25,
+      spreadPercent: 6.58,
+      lastUpdated: Date.now(),
+      source: 'Safe Fallback'
+    }))
+
+    const fallbackData = getFallbackSeedTickers(inrRates.domesticRate)
+    return {
+      success: true,
+      data: fallbackData,
+      inrRates,
+      totalCount: fallbackData.length,
+      timestamp: Date.now(),
+      fallback: true
+    }
   }
 })

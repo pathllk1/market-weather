@@ -177,7 +177,7 @@ export function useCrypto() {
     }).format(val)
   }
 
-  // Load initial snapshot from server
+  // Load initial snapshot from server with client direct failover
   async function fetchInitialData() {
     try {
       connectionStatus.value = 'connecting'
@@ -188,7 +188,7 @@ export function useCrypto() {
         totalCount: number
       }>('/api/crypto/tickers')
 
-      if (res?.success) {
+      if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
         tickers.value = res.data
         if (res.inrRates) {
           inrRates.value = res.inrRates
@@ -198,10 +198,70 @@ export function useCrypto() {
           selectedAsset.value = firstAsset
         }
         lastTickTime.value = new Date()
+        return
       }
     } catch (err) {
-      console.error('Failed to load initial crypto snapshot:', err)
-      connectionStatus.value = 'offline'
+      console.warn('Initial server snapshot error, attempting client-direct fetch:', err)
+    }
+
+    // Direct Browser-level Client Fallback (Bypasses Render cloud IP restrictions)
+    if (typeof window !== 'undefined') {
+      try {
+        const clientRes = await fetch('https://data-api.binance.vision/api/v3/ticker/24hr?type=MINI', {
+          signal: AbortSignal.timeout(6000)
+        })
+        if (clientRes.ok) {
+          const mini = await clientRes.json()
+          const rate = inrRates.value.domesticRate || 101.25
+          const clientAssets: CryptoAsset[] = []
+          for (const t of mini) {
+            if (t.symbol.endsWith('USDT') && !t.symbol.includes('UPUSDT') && !t.symbol.includes('DOWNUSDT')) {
+              const baseAsset = t.symbol.replace(/USDT$/, '')
+              const priceUsdt = parseFloat(t.lastPrice)
+              if (isNaN(priceUsdt) || priceUsdt <= 0) continue
+
+              const openPrice = parseFloat(t.openPrice) || priceUsdt
+              const priceChangeUsdt = priceUsdt - openPrice
+              const change24h = openPrice > 0 ? ((priceChangeUsdt / openPrice) * 100) : 0
+              const high24hUsdt = parseFloat(t.highPrice) || priceUsdt
+              const low24hUsdt = parseFloat(t.lowPrice) || priceUsdt
+              const volume24h = parseFloat(t.volume) || 0
+              const quoteVolumeUsdt = parseFloat(t.quoteVolume) || 0
+              if (quoteVolumeUsdt < 1000) continue
+
+              clientAssets.push({
+                symbol: t.symbol,
+                baseAsset,
+                quoteAsset: 'USDT',
+                name: baseAsset,
+                priceUsdt,
+                priceInr: priceUsdt * rate,
+                change24h: Number(change24h.toFixed(2)),
+                priceChangeUsdt,
+                priceChangeInr: priceChangeUsdt * rate,
+                high24hUsdt,
+                high24hInr: high24hUsdt * rate,
+                low24hUsdt,
+                low24hInr: low24hUsdt * rate,
+                volume24h,
+                quoteVolumeUsdt,
+                quoteVolumeInr: quoteVolumeUsdt * rate,
+                category: 'other'
+              })
+            }
+          }
+          if (clientAssets.length > 0) {
+            clientAssets.sort((a, b) => b.quoteVolumeUsdt - a.quoteVolumeUsdt)
+            tickers.value = clientAssets
+            if (!selectedAsset.value && clientAssets[0]) {
+              selectedAsset.value = clientAssets[0]
+            }
+            lastTickTime.value = new Date()
+          }
+        }
+      } catch (clientErr) {
+        console.warn('Client direct mini-ticker fallback also failed:', clientErr)
+      }
     }
   }
 
@@ -228,6 +288,56 @@ export function useCrypto() {
           const rate = activeRate.value
           const now = new Date()
           lastTickTime.value = now
+
+          // Auto-healing: If tickers array is empty (e.g. initial server fetch failed or delayed),
+          // instantly populate tickers from incoming live WebSocket stream
+          if (tickers.value.length === 0 && raw.length > 0) {
+            const bootstrapped: CryptoAsset[] = []
+            for (const item of raw) {
+              if (item.s.endsWith('USDT') && !item.s.includes('UP') && !item.s.includes('DOWN')) {
+                const baseAsset = item.s.replace(/USDT$/, '')
+                const priceUsdt = parseFloat(item.c)
+                if (isNaN(priceUsdt) || priceUsdt <= 0) continue
+
+                const openPrice = parseFloat(item.o) || priceUsdt
+                const highPrice = parseFloat(item.h) || priceUsdt
+                const lowPrice = parseFloat(item.l) || priceUsdt
+                const volume = parseFloat(item.v) || 0
+                const quoteVol = parseFloat(item.q) || 0
+                const priceChangeUsdt = priceUsdt - openPrice
+                const change24h = openPrice > 0 ? ((priceChangeUsdt / openPrice) * 100) : 0
+
+                bootstrapped.push({
+                  symbol: item.s,
+                  baseAsset,
+                  quoteAsset: 'USDT',
+                  name: baseAsset,
+                  priceUsdt,
+                  priceInr: priceUsdt * rate,
+                  change24h: Number(change24h.toFixed(2)),
+                  priceChangeUsdt,
+                  priceChangeInr: priceChangeUsdt * rate,
+                  high24hUsdt: highPrice,
+                  high24hInr: highPrice * rate,
+                  low24hUsdt: lowPrice,
+                  low24hInr: lowPrice * rate,
+                  volume24h: volume,
+                  quoteVolumeUsdt: quoteVol,
+                  quoteVolumeInr: quoteVol * rate,
+                  category: 'other'
+                })
+              }
+            }
+            if (bootstrapped.length > 0) {
+              bootstrapped.sort((a, b) => b.quoteVolumeUsdt - a.quoteVolumeUsdt)
+              tickers.value = bootstrapped
+              if (!selectedAsset.value && bootstrapped[0]) {
+                selectedAsset.value = bootstrapped[0]
+              }
+              connectionStatus.value = 'connected'
+              return
+            }
+          }
 
           // Create a quick lookup map of incoming updates
           const updateMap = new Map<string, MiniTickerMessage>()
