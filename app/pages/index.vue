@@ -55,23 +55,23 @@ const { isAuthenticated, isAdmin, user } = useAuth()
 
         <template v-else>
           <UButton
-            to="/login"
+            to="/crypto"
             color="primary"
             variant="solid"
+            size="md"
+            icon="i-lucide-coins"
+          >
+            Explore Crypto INR
+          </UButton>
+
+          <UButton
+            to="/login"
+            color="neutral"
+            variant="outline"
             size="md"
             icon="i-lucide-log-in"
           >
             Sign In
-          </UButton>
-
-          <UButton
-            to="/register"
-            color="neutral"
-            variant="outline"
-            size="md"
-            icon="i-lucide-user-plus"
-          >
-            Enroll Account
           </UButton>
         </template>
       </div>

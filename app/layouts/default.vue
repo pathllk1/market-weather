@@ -86,6 +86,16 @@ const { user, isAuthenticated, isAdmin, logout } = useAuth()
             </UButton>
 
             <UButton
+              to="/crypto"
+              variant="ghost"
+              size="xs"
+              color="neutral"
+              icon="i-lucide-coins"
+            >
+              Crypto INR
+            </UButton>
+
+            <UButton
               v-if="isAdmin"
               to="/admin/security"
               variant="ghost"
@@ -94,6 +104,41 @@ const { user, isAuthenticated, isAdmin, logout } = useAuth()
               icon="i-lucide-settings-2"
             >
               System Control
+            </UButton>
+          </nav>
+
+          <nav
+            v-else
+            class="hidden md:flex items-center gap-1"
+          >
+            <UButton
+              to="/market"
+              variant="ghost"
+              size="xs"
+              color="neutral"
+              icon="i-lucide-trending-up"
+            >
+              Market
+            </UButton>
+
+            <UButton
+              to="/crypto"
+              variant="ghost"
+              size="xs"
+              color="neutral"
+              icon="i-lucide-coins"
+            >
+              Crypto INR
+            </UButton>
+
+            <UButton
+              to="/weather"
+              variant="ghost"
+              size="xs"
+              color="neutral"
+              icon="i-lucide-cloud-sun"
+            >
+              Weather & AQI
             </UButton>
           </nav>
         </ClientOnly>

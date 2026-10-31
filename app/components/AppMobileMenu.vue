@@ -56,6 +56,12 @@ const navItems = computed(() => {
       icon: 'i-lucide-cloud-sun'
     },
     {
+      to: '/crypto',
+      label: 'Crypto Terminal (INR)',
+      description: 'Live Binance Vision stream in Indian Rupees',
+      icon: 'i-lucide-coins'
+    },
+    {
       to: '/analytics/stocks',
       label: 'Stock Analytics',
       description: 'Technical radar & historical data',
@@ -86,6 +92,11 @@ const bottomBarItems = computed(() => {
       to: '/market',
       label: 'Market',
       icon: 'i-lucide-trending-up'
+    },
+    {
+      to: '/crypto',
+      label: 'Crypto',
+      icon: 'i-lucide-coins'
     },
     {
       to: '/weather',
