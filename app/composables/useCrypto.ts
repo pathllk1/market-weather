@@ -193,9 +193,8 @@ export function useCrypto() {
         if (res.inrRates) {
           inrRates.value = res.inrRates
         }
-        const firstAsset = res.data[0]
-        if (!selectedAsset.value && firstAsset) {
-          selectedAsset.value = firstAsset
+        if (!selectedAsset.value) {
+          selectedAsset.value = res.data.find(a => a.symbol === 'BTCUSDT') || res.data[0] || null
         }
         lastTickTime.value = new Date()
         return
@@ -215,7 +214,13 @@ export function useCrypto() {
           const rate = inrRates.value.domesticRate || 101.25
           const clientAssets: CryptoAsset[] = []
           for (const t of mini) {
-            if (t.symbol.endsWith('USDT') && !t.symbol.includes('UPUSDT') && !t.symbol.includes('DOWNUSDT')) {
+            if (
+              t.symbol.endsWith('USDT')
+              && !t.symbol.includes('UPUSDT')
+              && !t.symbol.includes('DOWNUSDT')
+              && !t.symbol.startsWith('BUSD')
+              && !t.symbol.startsWith('TUSD')
+            ) {
               const baseAsset = t.symbol.replace(/USDT$/, '')
               const priceUsdt = parseFloat(t.lastPrice)
               if (isNaN(priceUsdt) || priceUsdt <= 0) continue
@@ -251,10 +256,14 @@ export function useCrypto() {
             }
           }
           if (clientAssets.length > 0) {
-            clientAssets.sort((a, b) => b.quoteVolumeUsdt - a.quoteVolumeUsdt)
+            clientAssets.sort((a, b) => {
+              if (a.symbol === 'BTCUSDT') return -1
+              if (b.symbol === 'BTCUSDT') return 1
+              return b.quoteVolumeUsdt - a.quoteVolumeUsdt
+            })
             tickers.value = clientAssets
-            if (!selectedAsset.value && clientAssets[0]) {
-              selectedAsset.value = clientAssets[0]
+            if (!selectedAsset.value) {
+              selectedAsset.value = clientAssets.find(a => a.symbol === 'BTCUSDT') || clientAssets[0] || null
             }
             lastTickTime.value = new Date()
           }
@@ -294,7 +303,13 @@ export function useCrypto() {
           if (tickers.value.length === 0 && raw.length > 0) {
             const bootstrapped: CryptoAsset[] = []
             for (const item of raw) {
-              if (item.s.endsWith('USDT') && !item.s.includes('UP') && !item.s.includes('DOWN')) {
+              if (
+                item.s.endsWith('USDT')
+                && !item.s.includes('UP')
+                && !item.s.includes('DOWN')
+                && !item.s.startsWith('BUSD')
+                && !item.s.startsWith('TUSD')
+              ) {
                 const baseAsset = item.s.replace(/USDT$/, '')
                 const priceUsdt = parseFloat(item.c)
                 if (isNaN(priceUsdt) || priceUsdt <= 0) continue
@@ -329,10 +344,14 @@ export function useCrypto() {
               }
             }
             if (bootstrapped.length > 0) {
-              bootstrapped.sort((a, b) => b.quoteVolumeUsdt - a.quoteVolumeUsdt)
+              bootstrapped.sort((a, b) => {
+                if (a.symbol === 'BTCUSDT') return -1
+                if (b.symbol === 'BTCUSDT') return 1
+                return b.quoteVolumeUsdt - a.quoteVolumeUsdt
+              })
               tickers.value = bootstrapped
-              if (!selectedAsset.value && bootstrapped[0]) {
-                selectedAsset.value = bootstrapped[0]
+              if (!selectedAsset.value) {
+                selectedAsset.value = bootstrapped.find(a => a.symbol === 'BTCUSDT') || bootstrapped[0] || null
               }
               connectionStatus.value = 'connected'
               return
@@ -690,6 +709,9 @@ export function useCrypto() {
     }
 
     await fetchInitialData()
+    if (!selectedAsset.value && tickers.value.length > 0) {
+      selectedAsset.value = tickers.value.find(a => a.symbol === 'BTCUSDT') || tickers.value[0] || null
+    }
     setupDirectBinanceStream()
   })
 

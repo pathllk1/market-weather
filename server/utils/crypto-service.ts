@@ -415,6 +415,8 @@ export async function getLiveCryptoTickers(forceRefresh = false): Promise<{
           && !t.symbol.includes('DOWNUSDT')
           && !t.symbol.includes('BEARUSDT')
           && !t.symbol.includes('BULLUSDT')
+          && !t.symbol.startsWith('BUSD')
+          && !t.symbol.startsWith('TUSD')
         ) {
           const baseAsset = t.symbol.replace(/USDT$/, '')
           const priceUsdt = parseFloat(t.lastPrice)
@@ -466,7 +468,11 @@ export async function getLiveCryptoTickers(forceRefresh = false): Promise<{
       if (res.ok) {
         const rawUs: RawBinanceTicker[] = await res.json()
         for (const t of rawUs) {
-          if (t.symbol.endsWith('USDT')) {
+          if (
+            t.symbol.endsWith('USDT')
+            && !t.symbol.startsWith('BUSD')
+            && !t.symbol.startsWith('TUSD')
+          ) {
             const baseAsset = t.symbol.replace(/USDT$/, '')
             const priceUsdt = parseFloat(t.lastPrice)
             if (isNaN(priceUsdt) || priceUsdt <= 0) continue
@@ -529,7 +535,11 @@ export async function getLiveCryptoTickers(forceRefresh = false): Promise<{
 
         if (Array.isArray(list)) {
           for (const item of list) {
-            if (item.symbol.endsWith('USDT')) {
+            if (
+              item.symbol.endsWith('USDT')
+              && !item.symbol.startsWith('BUSD')
+              && !item.symbol.startsWith('TUSD')
+            ) {
               const baseAsset = item.symbol.replace(/USDT$/, '')
               const priceUsdt = parseFloat(item.lastPrice)
               if (isNaN(priceUsdt) || priceUsdt <= 0) continue
@@ -587,8 +597,16 @@ export async function getLiveCryptoTickers(forceRefresh = false): Promise<{
     processed = getFallbackSeedTickers(activeRate)
   }
 
-  // Sort descending by 24h trading turnover volume
-  processed.sort((a, b) => b.quoteVolumeUsdt - a.quoteVolumeUsdt)
+  // Sort descending by 24h trading volume, ensuring BTC, ETH, SOL are permanently pinned at top
+  processed.sort((a, b) => {
+    if (a.symbol === 'BTCUSDT') return -1
+    if (b.symbol === 'BTCUSDT') return 1
+    if (a.symbol === 'ETHUSDT') return -1
+    if (b.symbol === 'ETHUSDT') return 1
+    if (a.symbol === 'SOLUSDT') return -1
+    if (b.symbol === 'SOLUSDT') return 1
+    return b.quoteVolumeUsdt - a.quoteVolumeUsdt
+  })
 
   tickersCache = {
     data: processed,
