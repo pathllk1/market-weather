@@ -4,10 +4,24 @@ let _client: SupabaseClient | null = null
 let _adminClient: SupabaseClient | null = null
 
 export function getSupabaseConfig() {
-  const config = useRuntimeConfig()
-  const url = (config.supabaseUrl || process.env.SUPABASE_URL || '').trim()
-  const anonKey = (config.public?.supabaseAnonKey || process.env.SUPABASE_ANON_KEY || '').trim()
-  const serviceRoleKey = (config.supabaseServiceRoleKey || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+  let runtimeUrl = ''
+  let runtimeAnon = ''
+  let runtimeSecret = ''
+
+  try {
+    if (typeof useRuntimeConfig === 'function') {
+      const config = useRuntimeConfig()
+      runtimeUrl = config.supabaseUrl || ''
+      runtimeAnon = config.public?.supabaseAnonKey || ''
+      runtimeSecret = config.supabaseServiceRoleKey || ''
+    }
+  } catch {
+    // Graceful fallback outside Nuxt context
+  }
+
+  const url = (runtimeUrl || process.env.SUPABASE_URL || '').trim()
+  const anonKey = (runtimeAnon || process.env.SUPABASE_ANON_KEY || '').trim()
+  const serviceRoleKey = (runtimeSecret || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
 
   return { url, anonKey, serviceRoleKey }
 }

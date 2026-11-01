@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import CryptoSyncBar from './CryptoSyncBar.vue'
+
 defineProps<{
+  tickers?: Array<{ symbol: string; baseAsset?: string; quoteAsset?: string; name?: string }>
   searchQuery: string
   activeCategory: string
   sortBy: 'volume' | 'price' | 'change' | 'name'
@@ -61,6 +64,9 @@ const categories = [
 
       <!-- Action Cluster -->
       <div class="flex flex-wrap items-center gap-2">
+        <!-- Supabase Smart-Sync Status & Trigger Bar -->
+        <CryptoSyncBar :tickers="tickers" />
+
         <!-- TDS Calculator Trigger Button -->
         <button
           class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs hover:from-amber-600 hover:to-orange-600 cursor-pointer transition-all"

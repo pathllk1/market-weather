@@ -1,0 +1,33 @@
+name: Daily Crypto Historical Sync
+
+on:
+  schedule:
+    # Runs daily at 00:15 UTC (05:45 IST) right after daily candle close
+    - cron: '15 0 * * *'
+  workflow_dispatch: # Allows manual trigger anytime from GitHub web UI
+
+jobs:
+  sync-crypto:
+    name: Supabase Historical Backfill
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Execute Headless Backfill Engine
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run sync:supabase
+

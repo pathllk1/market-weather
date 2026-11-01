@@ -12,6 +12,7 @@
     "typecheck": "nuxt typecheck",
     "test:turso": "node scripts/test-turso.mjs",
     "test:supabase": "node scripts/test-supabase.mjs",
+    "sync:supabase": "node scripts/sync-crypto-supabase.mjs",
     "db:check": "node scripts/check-db.mjs",
     "cron:ai-review": "node scripts/cron-ai-technical-review.mjs"
   },

@@ -13,6 +13,7 @@ import CryptoSignalsModal from '../../components/crypto/CryptoSignalsModal.vue'
 import CryptoArbitrageModal from '../../components/crypto/CryptoArbitrageModal.vue'
 import CryptoAlertModal from '../../components/crypto/CryptoAlertModal.vue'
 import CryptoStickyDock from '../../components/crypto/CryptoStickyDock.vue'
+import CryptoSyncBar from '../../components/crypto/CryptoSyncBar.vue'
 
 useHead({
   title: 'Crypto INR Terminal | Real-Time Indian Currency Crypto Intelligence',
@@ -136,6 +137,9 @@ function scrollToChart() {
             </button>
           </div>
 
+          <!-- Supabase Smart-Sync Status & Action -->
+          <CryptoSyncBar :tickers="tickers" />
+
           <!-- Quick Calculator Button -->
           <button
             class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white shadow-xs hover:bg-slate-800 transition-all cursor-pointer"
@@ -187,6 +191,7 @@ function scrollToChart() {
 
       <!-- 3. Toolbar & Category Filters -->
       <CryptoToolbar
+        :tickers="tickers"
         :search-query="searchQuery"
         :active-category="activeCategory"
         :sort-by="sortBy"
