@@ -322,6 +322,24 @@ function initOrUpdateChart(
         width: 1,
         style: 3
       }
+    },
+    handleScroll: {
+      mouseWheel: false,
+      pressedMouseMove: true,
+      horzTouchDrag: true,
+      vertTouchDrag: false
+    },
+    handleScale: {
+      mouseWheel: false,
+      pinch: true,
+      axisPressedMouseMove: {
+        time: true,
+        price: true
+      },
+      axisDoubleClickReset: {
+        time: true,
+        price: true
+      }
     }
   })
 

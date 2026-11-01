@@ -19,8 +19,12 @@ export default defineNuxtConfig({
     csrfSecret: process.env.CSRF_SECRET || '',
     initialAdminEmail: process.env.INITIAL_ADMIN_EMAIL || 'admin@security.enterprise',
     initialAdminPassword: process.env.INITIAL_ADMIN_PASSWORD || 'AdminSecure#2026@Defense!',
+    supabaseUrl: process.env.SUPABASE_URL || '',
+    supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
     public: {
-      appName: 'Enterprise ERP System'
+      appName: 'Enterprise ERP System',
+      supabaseUrl: process.env.SUPABASE_URL || '',
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY || ''
     }
   },
 
