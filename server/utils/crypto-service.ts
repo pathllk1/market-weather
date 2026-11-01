@@ -458,62 +458,7 @@ export async function getLiveCryptoTickers(forceRefresh = false): Promise<{
     console.warn('Binance Vision MINI tickers fetch failed, falling back:', (err as Error).message)
   }
 
-  // Attempt 2: Binance US Ticker (Allowed on US Cloud / AWS Oregon Render instances)
-  if (!processed.length) {
-    try {
-      const res = await fetch('https://api.binance.us/api/v3/ticker/24hr', {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        signal: AbortSignal.timeout(8000)
-      })
-      if (res.ok) {
-        const rawUs: RawBinanceTicker[] = await res.json()
-        for (const t of rawUs) {
-          if (
-            t.symbol.endsWith('USDT')
-            && !t.symbol.startsWith('BUSD')
-            && !t.symbol.startsWith('TUSD')
-          ) {
-            const baseAsset = t.symbol.replace(/USDT$/, '')
-            const priceUsdt = parseFloat(t.lastPrice)
-            if (isNaN(priceUsdt) || priceUsdt <= 0) continue
-
-            const change24h = parseFloat(t.priceChangePercent || '0') || 0
-            const priceChangeUsdt = parseFloat(t.priceChange || '0') || 0
-            const high24hUsdt = parseFloat(t.highPrice || '0') || priceUsdt
-            const low24hUsdt = parseFloat(t.lowPrice || '0') || priceUsdt
-            const volume24h = parseFloat(t.volume) || 0
-            const quoteVolumeUsdt = parseFloat(t.quoteVolume) || 0
-
-            if (quoteVolumeUsdt < 1000) continue
-
-            processed.push({
-              symbol: t.symbol,
-              baseAsset,
-              quoteAsset: 'USDT',
-              name: KNOWN_NAMES[baseAsset] || baseAsset,
-              priceUsdt,
-              priceInr: priceUsdt * activeRate,
-              change24h: Number(change24h.toFixed(2)),
-              priceChangeUsdt,
-              priceChangeInr: priceChangeUsdt * activeRate,
-              high24hUsdt,
-              high24hInr: high24hUsdt * activeRate,
-              low24hUsdt,
-              low24hInr: low24hUsdt * activeRate,
-              volume24h,
-              quoteVolumeUsdt,
-              quoteVolumeInr: quoteVolumeUsdt * activeRate,
-              category: CATEGORY_MAP[baseAsset] || 'other'
-            })
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Binance US tickers fetch failed, falling back:', (err as Error).message)
-    }
-  }
-
-  // Attempt 3: Bybit Spot API (Global, no US-cloud restrictions)
+  // Attempt 2: Bybit Spot API (Global, 500+ tokens, no US-cloud restrictions)
   if (!processed.length) {
     try {
       const res = await fetch('https://api.bybit.com/v5/market/tickers?category=spot', {
@@ -578,7 +523,62 @@ export async function getLiveCryptoTickers(forceRefresh = false): Promise<{
         }
       }
     } catch (err) {
-      console.warn('Bybit tickers fetch failed:', (err as Error).message)
+      console.warn('Bybit tickers fetch failed, attempting Binance US:', (err as Error).message)
+    }
+  }
+
+  // Attempt 3: Binance US Ticker (Allowed on US Cloud / AWS Oregon Render instances)
+  if (!processed.length) {
+    try {
+      const res = await fetch('https://api.binance.us/api/v3/ticker/24hr', {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(8000)
+      })
+      if (res.ok) {
+        const rawUs: RawBinanceTicker[] = await res.json()
+        for (const t of rawUs) {
+          if (
+            t.symbol.endsWith('USDT')
+            && !t.symbol.startsWith('BUSD')
+            && !t.symbol.startsWith('TUSD')
+          ) {
+            const baseAsset = t.symbol.replace(/USDT$/, '')
+            const priceUsdt = parseFloat(t.lastPrice)
+            if (isNaN(priceUsdt) || priceUsdt <= 0) continue
+
+            const change24h = parseFloat(t.priceChangePercent || '0') || 0
+            const priceChangeUsdt = parseFloat(t.priceChange || '0') || 0
+            const high24hUsdt = parseFloat(t.highPrice || '0') || priceUsdt
+            const low24hUsdt = parseFloat(t.lowPrice || '0') || priceUsdt
+            const volume24h = parseFloat(t.volume) || 0
+            const quoteVolumeUsdt = parseFloat(t.quoteVolume) || 0
+
+            if (quoteVolumeUsdt < 1000) continue
+
+            processed.push({
+              symbol: t.symbol,
+              baseAsset,
+              quoteAsset: 'USDT',
+              name: KNOWN_NAMES[baseAsset] || baseAsset,
+              priceUsdt,
+              priceInr: priceUsdt * activeRate,
+              change24h: Number(change24h.toFixed(2)),
+              priceChangeUsdt,
+              priceChangeInr: priceChangeUsdt * activeRate,
+              high24hUsdt,
+              high24hInr: high24hUsdt * activeRate,
+              low24hUsdt,
+              low24hInr: low24hUsdt * activeRate,
+              volume24h,
+              quoteVolumeUsdt,
+              quoteVolumeInr: quoteVolumeUsdt * activeRate,
+              category: CATEGORY_MAP[baseAsset] || 'other'
+            })
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Binance US tickers fetch failed, falling back:', (err as Error).message)
     }
   }
 

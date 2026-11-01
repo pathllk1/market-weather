@@ -71,6 +71,128 @@ interface MiniTickerMessage {
   q: string // Total traded quote asset volume
 }
 
+const CATEGORY_MAP: Record<string, CryptoAsset['category']> = {
+  BTC: 'l1-l2',
+  ETH: 'l1-l2',
+  SOL: 'l1-l2',
+  BNB: 'l1-l2',
+  XRP: 'l1-l2',
+  ADA: 'l1-l2',
+  AVAX: 'l1-l2',
+  SUI: 'l1-l2',
+  NEAR: 'l1-l2',
+  APT: 'l1-l2',
+  DOT: 'l1-l2',
+  POL: 'l1-l2',
+  MATIC: 'l1-l2',
+  TRX: 'l1-l2',
+  FTM: 'l1-l2',
+  ATOM: 'l1-l2',
+  SEI: 'l1-l2',
+  KAS: 'l1-l2',
+  TIA: 'l1-l2',
+  ARB: 'l1-l2',
+  OP: 'l1-l2',
+
+  UNI: 'defi',
+  AAVE: 'defi',
+  MKR: 'defi',
+  CRV: 'defi',
+  PENDLE: 'defi',
+  LDO: 'defi',
+  INJ: 'defi',
+  RUNE: 'defi',
+  DYDX: 'defi',
+  SNX: 'defi',
+  CAKE: 'defi',
+  ENA: 'defi',
+  JUP: 'defi',
+
+  FET: 'ai-data',
+  RENDER: 'ai-data',
+  TAO: 'ai-data',
+  GRT: 'ai-data',
+  WLD: 'ai-data',
+  ARKM: 'ai-data',
+  THETA: 'ai-data',
+  OCEAN: 'ai-data',
+  AGIX: 'ai-data',
+  IO: 'ai-data',
+
+  DOGE: 'meme',
+  SHIB: 'meme',
+  PEPE: 'meme',
+  WIF: 'meme',
+  BONK: 'meme',
+  FLOKI: 'meme',
+  BOME: 'meme',
+  POPCAT: 'meme',
+  MEME: 'meme',
+
+  LINK: 'infrastructure',
+  FIL: 'infrastructure',
+  PYTH: 'infrastructure',
+  AR: 'infrastructure',
+  HNT: 'infrastructure',
+  ICP: 'infrastructure'
+}
+
+const KNOWN_NAMES: Record<string, string> = {
+  BTC: 'Bitcoin',
+  ETH: 'Ethereum',
+  SOL: 'Solana',
+  BNB: 'BNB Chain',
+  XRP: 'XRP Ledger',
+  DOGE: 'Dogecoin',
+  ADA: 'Cardano',
+  AVAX: 'Avalanche',
+  SUI: 'Sui Network',
+  SHIB: 'Shiba Inu',
+  PEPE: 'Pepe',
+  NEAR: 'NEAR Protocol',
+  LINK: 'Chainlink',
+  DOT: 'Polkadot',
+  POL: 'Polygon (POL)',
+  MATIC: 'Polygon (MATIC)',
+  TRX: 'TRON',
+  LTC: 'Litecoin',
+  BCH: 'Bitcoin Cash',
+  UNI: 'Uniswap',
+  AAVE: 'Aave',
+  FET: 'Artificial Superintelligence',
+  RENDER: 'Render Network',
+  TAO: 'Bittensor',
+  WIF: 'dogwifhat',
+  BONK: 'Bonk',
+  APT: 'Aptos',
+  ARB: 'Arbitrum',
+  OP: 'Optimism',
+  TIA: 'Celestia',
+  INJ: 'Injective',
+  KAS: 'Kaspa',
+  PENDLE: 'Pendle',
+  FLOKI: 'Floki',
+  POPCAT: 'Popcat',
+  ICP: 'Internet Computer',
+  FIL: 'Filecoin',
+  ATOM: 'Cosmos',
+  SEI: 'Sei',
+  ENA: 'Ethena',
+  JUP: 'Jupiter',
+  MKR: 'Maker',
+  CRV: 'Curve DAO',
+  LDO: 'Lido DAO',
+  USDC: 'USD Coin',
+  WLD: 'Worldcoin',
+  ARKM: 'Arkham',
+  THETA: 'Theta Network',
+  PYTH: 'Pyth Network',
+  HNT: 'Helium',
+  DYDX: 'dYdX',
+  SNX: 'Synthetix',
+  CAKE: 'PancakeSwap'
+}
+
 export function useCrypto() {
   const tickers = ref<CryptoAsset[]>([])
   const inrRates = ref<InrRateData>({
@@ -197,13 +319,18 @@ export function useCrypto() {
           selectedAsset.value = res.data.find(a => a.symbol === 'BTCUSDT') || res.data[0] || null
         }
         lastTickTime.value = new Date()
-        return
+
+        // If the server returned the comprehensive global catalog (>= 300 coins), we are fully hydrated
+        if (res.data.length >= 300) {
+          return
+        }
       }
     } catch (err) {
       console.warn('Initial server snapshot error, attempting client-direct fetch:', err)
     }
 
     // Direct Browser-level Client Fallback (Bypasses Render cloud IP restrictions)
+    // Runs if server returned a cloud-restricted subset (<300 coins, e.g. Render US datacenter fallback)
     if (typeof window !== 'undefined') {
       try {
         const clientRes = await fetch('https://data-api.binance.vision/api/v3/ticker/24hr?type=MINI', {
@@ -238,7 +365,7 @@ export function useCrypto() {
                 symbol: t.symbol,
                 baseAsset,
                 quoteAsset: 'USDT',
-                name: baseAsset,
+                name: KNOWN_NAMES[baseAsset] || baseAsset,
                 priceUsdt,
                 priceInr: priceUsdt * rate,
                 change24h: Number(change24h.toFixed(2)),
@@ -251,7 +378,7 @@ export function useCrypto() {
                 volume24h,
                 quoteVolumeUsdt,
                 quoteVolumeInr: quoteVolumeUsdt * rate,
-                category: 'other'
+                category: CATEGORY_MAP[baseAsset] || 'other'
               })
             }
           }
@@ -298,9 +425,10 @@ export function useCrypto() {
           const now = new Date()
           lastTickTime.value = now
 
-          // Auto-healing: If tickers array is empty (e.g. initial server fetch failed or delayed),
-          // instantly populate tickers from incoming live WebSocket stream
-          if (tickers.value.length === 0 && raw.length > 0) {
+          // Auto-healing & Catalog Expansion:
+          // If tickers is empty or has a restricted cloud count (< 300, e.g. Render US fallback of 94),
+          // instantly bootstrap the full comprehensive list from the incoming global WebSocket stream (690+ coins)
+          if ((tickers.value.length === 0 || tickers.value.length < 300) && raw.length > 300) {
             const bootstrapped: CryptoAsset[] = []
             for (const item of raw) {
               if (
@@ -326,7 +454,7 @@ export function useCrypto() {
                   symbol: item.s,
                   baseAsset,
                   quoteAsset: 'USDT',
-                  name: baseAsset,
+                  name: KNOWN_NAMES[baseAsset] || baseAsset,
                   priceUsdt,
                   priceInr: priceUsdt * rate,
                   change24h: Number(change24h.toFixed(2)),
@@ -339,7 +467,7 @@ export function useCrypto() {
                   volume24h: volume,
                   quoteVolumeUsdt: quoteVol,
                   quoteVolumeInr: quoteVol * rate,
-                  category: 'other'
+                  category: CATEGORY_MAP[baseAsset] || 'other'
                 })
               }
             }
