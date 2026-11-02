@@ -47,9 +47,10 @@ export const authService = {
     })
   },
 
-  async me(): Promise<{ user: User; session: SessionInfo | null }> {
+  async me(headers?: Record<string, string>): Promise<{ user: User; session: SessionInfo | null }> {
     return await $fetch('/api/auth/me', {
-      method: 'GET'
+      method: 'GET',
+      headers
     })
   },
 

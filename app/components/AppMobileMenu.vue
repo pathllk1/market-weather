@@ -62,6 +62,12 @@ const navItems = computed(() => {
       icon: 'i-lucide-coins'
     },
     {
+      to: '/pdf',
+      label: 'PDF Studio',
+      description: 'In-browser enterprise merge, split, watermark & convert',
+      icon: 'i-lucide-file-text'
+    },
+    {
       to: '/analytics/stocks',
       label: 'Stock Analytics',
       description: 'Technical radar & historical data',

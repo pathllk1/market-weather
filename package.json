@@ -30,6 +30,7 @@
     "nuxt-icons": "4.0.0",
     "nuxt-lucide-icons": "2.1.0",
     "nuxt-notify": "1.1.4",
+    "pdf-lib": "^1.17.1",
     "tailwindcss": "^4.3.3",
     "unpdf": "^1.8.1",
     "yahoo-finance2": "^4.0.2"

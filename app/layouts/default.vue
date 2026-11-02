@@ -96,6 +96,16 @@ const { user, isAuthenticated, isAdmin, logout } = useAuth()
             </UButton>
 
             <UButton
+              to="/pdf"
+              variant="ghost"
+              size="xs"
+              color="neutral"
+              icon="i-lucide-file-text"
+            >
+              PDF Studio
+            </UButton>
+
+            <UButton
               v-if="isAdmin"
               to="/admin/security"
               variant="ghost"

@@ -15,7 +15,8 @@ export function useAuth() {
     try {
       isLoading.value = true
       authError.value = null
-      const res = await authService.me()
+      const headers = import.meta.server ? useRequestHeaders(['cookie']) as Record<string, string> : undefined
+      const res = await authService.me(headers)
       user.value = res.user
       session.value = res.session
     } catch {
