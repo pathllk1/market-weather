@@ -8,6 +8,7 @@ definePageMeta({
 })
 
 const { login, isLoading } = useAuth()
+const route = useRoute()
 
 const email = ref('')
 const password = ref('')
@@ -21,7 +22,10 @@ async function handleLogin() {
   try {
     errorMessage.value = null
     await login({ email: email.value, password: password.value })
-    navigateTo('/dashboard')
+    const target = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') && !route.query.redirect.startsWith('//')
+      ? route.query.redirect
+      : '/dashboard'
+    navigateTo(target)
   } catch (err: any) {
     const message = err?.data?.statusMessage || err?.message || 'Login failed.'
     errorMessage.value = message
@@ -52,91 +56,92 @@ function startCountdown(seconds: number) {
 </script>
 
 <template>
-  <UCard class="w-full">
-    <template #header>
-      <div class="text-center space-y-1">
-        <UIcon name="i-lucide-shield-check" class="text-primary text-3xl mx-auto" />
-        <h2 class="text-lg font-bold">Enterprise ERP Sign In</h2>
-        <p class="text-xs text-muted">
-          Secure business access portal with automated account protection
-        </p>
-      </div>
-    </template>
+  <div class="space-y-6">
+    <div class="space-y-1">
+      <h2 class="text-xl font-bold tracking-tight text-slate-900">
+        Enterprise Clearance Login
+      </h2>
+      <p class="text-xs text-slate-500">
+        Enter your cryptographically registered credentials to access the enterprise terminal
+      </p>
+    </div>
 
-    <form class="space-y-4" @submit.prevent="handleLogin">
-      <!-- Error / Lockout Alert -->
-      <UAlert
-        v-if="lockoutRemainingSeconds && lockoutRemainingSeconds > 0"
-        color="error"
-        variant="solid"
-        icon="i-lucide-lock"
-        title="Account Temporarily Locked"
-        :description="`Continuous failed attempts detected. Access is locked for ${lockoutRemainingSeconds} seconds.`"
+    <!-- Error / Lockout Alert -->
+    <div
+      v-if="errorMessage"
+      class="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-start gap-2"
+    >
+      <UIcon
+        name="i-lucide-alert-triangle"
+        class="w-4 h-4 text-red-500 shrink-0 mt-0.5"
       />
-
-      <UAlert
-        v-else-if="errorMessage"
-        color="warning"
-        variant="subtle"
-        icon="i-lucide-triangle-alert"
-        :title="errorMessage"
-        close
-        @update:open="errorMessage = null"
-      />
-
       <div>
-        <label class="block text-xs font-medium mb-1">Work Email</label>
+        <div class="font-medium">
+          {{ errorMessage }}
+        </div>
+        <div
+          v-if="lockoutRemainingSeconds"
+          class="font-mono mt-1 text-red-600 font-bold"
+        >
+          Security cool-down remaining: {{ lockoutRemainingSeconds }}s
+        </div>
+      </div>
+    </div>
+
+    <form
+      class="space-y-4"
+      @submit.prevent="handleLogin"
+    >
+      <UFormField
+        label="Clearance Identity (Email)"
+        name="email"
+      >
         <UInput
           v-model="email"
           type="email"
-          placeholder="user@enterprise.com"
+          placeholder="officer@enterprise.defense"
           icon="i-lucide-mail"
-          required
-          autofocus
-          size="sm"
           class="w-full"
+          :disabled="isLoading || lockoutRemainingSeconds !== null"
+          required
         />
-      </div>
+      </UFormField>
 
-      <div>
-        <label class="block text-xs font-medium mb-1">Password</label>
+      <UFormField
+        label="Access Password"
+        name="password"
+      >
         <UInput
           v-model="password"
           type="password"
           placeholder="••••••••••••"
-          icon="i-lucide-key"
-          required
-          size="sm"
+          icon="i-lucide-lock"
           class="w-full"
+          :disabled="isLoading || lockoutRemainingSeconds !== null"
+          required
         />
-      </div>
-
-      <div class="flex items-center justify-between text-xs text-muted">
-        <span>Continuous security active</span>
-        <span class="text-primary font-medium">5-Attempt Threshold</span>
-      </div>
+      </UFormField>
 
       <UButton
         type="submit"
-        color="primary"
-        variant="solid"
         block
-        size="sm"
+        color="primary"
+        class="w-full mt-2"
         :loading="isLoading"
-        :disabled="!!lockoutRemainingSeconds && lockoutRemainingSeconds > 0"
-        icon="i-lucide-log-in"
+        :disabled="lockoutRemainingSeconds !== null"
       >
-        Sign In to Portal
+        Authenticate Session
       </UButton>
     </form>
 
-    <template #footer>
-      <div class="flex items-center justify-between text-xs text-muted">
-        <span>Need an account?</span>
-        <NuxtLink to="/register" class="text-primary font-medium hover:underline">
-          Enroll Account
-        </NuxtLink>
-      </div>
-    </template>
-  </UCard>
+    <div class="text-center text-xs text-slate-400">
+      Need credentials?
+      <NuxtLink
+        to="/register"
+        class="text-primary font-semibold hover:underline ml-1"
+      >
+        Register Account
+      </NuxtLink>
+    </div>
+  </div>
 </template>

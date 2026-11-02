@@ -3,7 +3,7 @@ import { getLiveQuotes } from '../../../utils/yahoo'
 import type { UserMarketView, ViewEquityOhlcv, MarketViewDetailResponse } from '~/types/market'
 
 export default defineEventHandler(async (event): Promise<MarketViewDetailResponse> => {
-  const userId = event.context.user?.id || 'guest_default_user'
+  const userId = event.context.user!.id
   const viewId = getRouterParam(event, 'id')
   const query = getQuery(event)
   const forceRefresh = query.refresh === 'true' || query.refresh === '1'

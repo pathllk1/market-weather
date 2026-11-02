@@ -526,6 +526,7 @@ export function useCrypto() {
                 asset.volume24h = parseFloat(upd.v)
                 asset.quoteVolumeUsdt = parseFloat(upd.q)
                 asset.quoteVolumeInr = asset.quoteVolumeUsdt * rate
+                checkPriceAlerts(asset.symbol, asset.priceInr)
               }
             }
           }
@@ -622,15 +623,117 @@ export function useCrypto() {
   }
 
   // Watchlist methods
-  function toggleWatchlist(symbol: string) {
-    const idx = watchlist.value.indexOf(symbol)
-    if (idx >= 0) {
-      watchlist.value.splice(idx, 1)
-    } else {
-      watchlist.value.push(symbol)
+  // Price Alert Checker for live streaming ticks
+  function checkPriceAlerts(symbol: string, currentPriceInr: number) {
+    for (const alert of priceAlerts.value) {
+      if (alert.symbol === symbol && !alert.triggered) {
+        const hit =
+          (alert.direction === 'above' && currentPriceInr >= alert.targetPriceInr) ||
+          (alert.direction === 'below' && currentPriceInr <= alert.targetPriceInr)
+        if (hit) {
+          alert.triggered = true
+          $fetch('/api/crypto/user/alerts', {
+            method: 'PATCH',
+            body: { id: alert.id, triggered: true }
+          }).catch(() => null)
+        }
+      }
     }
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('crypto_inr_watchlist', JSON.stringify(watchlist.value))
+  }
+
+  // Cloud User State Sync (Supabase PostgreSQL)
+  async function loadCloudUserData() {
+    try {
+      let localWatchlist: string[] | null = null
+      let localWallet: any = null
+      let localAlerts: any = null
+
+      if (typeof localStorage !== 'undefined') {
+        try {
+          const wStr = localStorage.getItem('crypto_inr_watchlist')
+          const walStr = localStorage.getItem('crypto_paper_wallet')
+          const aStr = localStorage.getItem('crypto_price_alerts')
+          if (wStr) localWatchlist = JSON.parse(wStr)
+          if (walStr) localWallet = JSON.parse(walStr)
+          if (aStr) localAlerts = JSON.parse(aStr)
+        } catch {
+          // ignore parse errors
+        }
+      }
+
+      const hasLegacyData = (localWatchlist && localWatchlist.length > 0) ||
+        (localWallet && Array.isArray(localWallet.history) && localWallet.history.length > 0) ||
+        (localAlerts && localAlerts.length > 0)
+
+      if (hasLegacyData) {
+        await $fetch('/api/crypto/user/migrate-local', {
+          method: 'POST',
+          body: {
+            watchlist: localWatchlist || [],
+            wallet: localWallet,
+            alerts: localAlerts || []
+          }
+        }).catch(() => null)
+
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('crypto_inr_watchlist')
+          localStorage.removeItem('crypto_paper_wallet')
+          localStorage.removeItem('crypto_price_alerts')
+        }
+      }
+
+      const profile = await $fetch<{
+        success: boolean
+        watchlist: string[]
+        wallet: {
+          cashInr: number
+          positions: Record<string, PaperPosition>
+          history: PaperTradeLog[]
+        }
+        alerts: PriceAlert[]
+      }>('/api/crypto/user/profile')
+
+      if (profile?.success) {
+        if (Array.isArray(profile.watchlist)) {
+          watchlist.value = profile.watchlist
+        }
+        if (profile.wallet) {
+          paperWallet.cashInr = profile.wallet.cashInr ?? 1000000
+          paperWallet.positions = profile.wallet.positions ?? {}
+          paperWallet.history = profile.wallet.history ?? []
+        }
+        if (Array.isArray(profile.alerts)) {
+          priceAlerts.value = profile.alerts
+        }
+      }
+    } catch (err) {
+      console.warn('[useCrypto] Failed to load user profile from Supabase:', err)
+    }
+  }
+
+  async function toggleWatchlist(symbol: string) {
+    const idx = watchlist.value.indexOf(symbol)
+    const willAdd = idx < 0
+    if (willAdd) {
+      watchlist.value.push(symbol)
+    } else {
+      watchlist.value.splice(idx, 1)
+    }
+
+    try {
+      if (willAdd) {
+        await $fetch('/api/crypto/user/watchlist', {
+          method: 'POST',
+          body: { symbol }
+        })
+      } else {
+        await $fetch('/api/crypto/user/watchlist', {
+          method: 'DELETE',
+          body: { symbol }
+        })
+      }
+    } catch (err) {
+      console.warn('[useCrypto] Failed to sync watchlist to Supabase:', err)
     }
   }
 
@@ -638,8 +741,8 @@ export function useCrypto() {
     return watchlist.value.includes(symbol)
   }
 
-  // Paper Trading Operations
-  function executePaperTrade(params: {
+  // Paper Trading Operations (Supabase PostgreSQL)
+  async function executePaperTrade(params: {
     symbol: string
     baseAsset: string
     side: 'BUY' | 'SELL'
@@ -654,64 +757,59 @@ export function useCrypto() {
       if (paperWallet.cashInr < gross) {
         return { success: false, message: 'Insufficient virtual cash balance' }
       }
-      paperWallet.cashInr -= gross
-      const pos = paperWallet.positions[params.symbol] || {
-        symbol: params.symbol,
-        baseAsset: params.baseAsset,
-        qty: 0,
-        avgPriceInr: 0,
-        totalCostInr: 0
-      }
-      pos.qty += params.qty
-      pos.totalCostInr += gross
-      pos.avgPriceInr = pos.totalCostInr / pos.qty
-      paperWallet.positions[params.symbol] = pos
     } else {
       const pos = paperWallet.positions[params.symbol]
       if (!pos || pos.qty < params.qty) {
         return { success: false, message: 'Insufficient coin holdings to sell' }
       }
-      paperWallet.cashInr += net
-      pos.qty -= params.qty
-      if (pos.qty <= 0.000001) {
-        Reflect.deleteProperty(paperWallet.positions, params.symbol)
-      } else {
-        pos.totalCostInr = pos.qty * pos.avgPriceInr
+    }
+
+    try {
+      const res = await $fetch<{
+        success: boolean
+        message: string
+        wallet: {
+          cashInr: number
+          positions: Record<string, PaperPosition>
+          history: PaperTradeLog[]
+        }
+      }>('/api/crypto/user/paper-trade', {
+        method: 'POST',
+        body: params
+      })
+
+      if (res?.success && res.wallet) {
+        paperWallet.cashInr = res.wallet.cashInr
+        paperWallet.positions = res.wallet.positions
+        paperWallet.history = res.wallet.history
+        return { success: true, message: res.message }
       }
+    } catch (err: any) {
+      const msg = err?.data?.statusMessage || err?.message || 'Failed to execute paper trade'
+      return { success: false, message: msg }
     }
 
-    paperWallet.history.unshift({
-      id: Math.random().toString(36).slice(2, 9),
-      timestamp: Date.now(),
-      symbol: params.symbol,
-      side: params.side,
-      priceInr: params.priceInr,
-      qty: params.qty,
-      grossTotalInr: gross,
-      tdsInr: tds,
-      netTotalInr: net
-    })
-
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('crypto_paper_wallet', JSON.stringify(paperWallet))
-    }
     return { success: true, message: `Successfully executed paper ${params.side}` }
   }
 
-  function resetPaperWallet() {
+  async function resetPaperWallet() {
     paperWallet.cashInr = 1000000
     paperWallet.positions = {}
     paperWallet.history = []
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('crypto_paper_wallet')
+
+    try {
+      await $fetch('/api/crypto/user/paper-wallet/reset', { method: 'POST' })
+    } catch (err) {
+      console.warn('[useCrypto] Failed to reset cloud wallet:', err)
     }
   }
 
-  // Price Alert Methods
-  function addPriceAlert(symbol: string, targetPriceInr: number, direction: 'above' | 'below') {
+  // Price Alert Methods (Supabase PostgreSQL)
+  async function addPriceAlert(symbol: string, targetPriceInr: number, direction: 'above' | 'below') {
     const current = tickers.value.find(t => t.symbol === symbol)?.priceInr || 0
+    const tempId = 'temp_' + Date.now()
     const item: PriceAlert = {
-      id: Math.random().toString(36).slice(2, 9),
+      id: tempId,
       symbol,
       targetPriceInr,
       direction,
@@ -720,15 +818,32 @@ export function useCrypto() {
       triggered: false
     }
     priceAlerts.value.unshift(item)
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('crypto_price_alerts', JSON.stringify(priceAlerts.value))
+
+    try {
+      const res = await $fetch<{ success: boolean; alert: PriceAlert }>('/api/crypto/user/alerts', {
+        method: 'POST',
+        body: { symbol, targetPriceInr, direction }
+      })
+      if (res?.success && res.alert) {
+        const idx = priceAlerts.value.findIndex(a => a.id === tempId)
+        if (idx >= 0) {
+          priceAlerts.value[idx] = res.alert
+        }
+      }
+    } catch (err) {
+      console.warn('[useCrypto] Failed to save alert to Supabase:', err)
     }
   }
 
-  function removePriceAlert(id: string) {
+  async function removePriceAlert(id: string) {
     priceAlerts.value = priceAlerts.value.filter(a => a.id !== id)
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('crypto_price_alerts', JSON.stringify(priceAlerts.value))
+    try {
+      await $fetch('/api/crypto/user/alerts', {
+        method: 'DELETE',
+        body: { id }
+      })
+    } catch (err) {
+      console.warn('[useCrypto] Failed to delete alert from Supabase:', err)
     }
   }
 
@@ -815,26 +930,8 @@ export function useCrypto() {
   })
 
   onMounted(async () => {
-    // Restore persistent watchlist, paper trading, and price alerts
-    if (typeof localStorage !== 'undefined') {
-      try {
-        const savedWatchlist = localStorage.getItem('crypto_inr_watchlist')
-        if (savedWatchlist) watchlist.value = JSON.parse(savedWatchlist)
-
-        const savedWallet = localStorage.getItem('crypto_paper_wallet')
-        if (savedWallet) {
-          const parsed = JSON.parse(savedWallet)
-          paperWallet.cashInr = parsed.cashInr ?? 1000000
-          paperWallet.positions = parsed.positions ?? {}
-          paperWallet.history = parsed.history ?? []
-        }
-
-        const savedAlerts = localStorage.getItem('crypto_price_alerts')
-        if (savedAlerts) priceAlerts.value = JSON.parse(savedAlerts)
-      } catch {
-        // ignore parse error
-      }
-    }
+    // Initialize cloud user state from Supabase (with 1-time localStorage migration)
+    loadCloudUserData()
 
     await fetchInitialData()
     if (!selectedAsset.value && tickers.value.length > 0) {

@@ -259,7 +259,7 @@ defineExpose({
           </div>
 
           <!-- Navigation Links -->
-          <div class="space-y-1.5">
+          <div v-if="isAuthenticated" class="space-y-1.5">
             <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 px-2 block mb-1">
               Application Pages
             </span>
@@ -357,7 +357,7 @@ defineExpose({
 
     <!-- Mobile Bottom Navigation Bar (1-Thumb Easy Access) -->
     <nav
-      v-if="props.showBottomBar !== false"
+      v-if="props.showBottomBar !== false && isAuthenticated"
       class="md:hidden fixed bottom-0 inset-x-0 z-40 h-14 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-lg border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-around px-2 shadow-lg"
     >
       <NuxtLink

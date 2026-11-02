@@ -1,7 +1,7 @@
 import { getTursoClient } from '../../../utils/turso'
 
 export default defineEventHandler(async (event) => {
-  const userId = event.context.user?.id || 'guest_default_user'
+  const userId = event.context.user!.id
   const viewId = getRouterParam(event, 'id')
 
   if (!viewId) {

@@ -2,7 +2,7 @@ import { getTursoClient } from '../../utils/turso'
 import type { DematAccount } from '~/types/portfolio'
 
 export default defineEventHandler(async (event) => {
-  const userId = event.context.user?.id || 'guest_default_user'
+  const userId = event.context.user!.id
   const db = getTursoClient()
 
   let res = await db.execute({

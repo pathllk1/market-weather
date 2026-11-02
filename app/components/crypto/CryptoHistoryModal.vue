@@ -126,10 +126,10 @@ const stats = computed(() => {
   const newest = list[0]
   const oldest = list[list.length - 1]
 
-  const returnPercent = oldest && oldest.openInr > 0
+  const returnPercent = newest && oldest && oldest.openInr > 0
     ? Number((((newest.closeInr - oldest.openInr) / oldest.openInr) * 100).toFixed(2))
     : 0
-  const returnInr = oldest ? newest.closeInr - oldest.openInr : 0
+  const returnInr = newest && oldest ? newest.closeInr - oldest.openInr : 0
 
   let highInr = -Infinity
   let lowInr = Infinity

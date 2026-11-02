@@ -107,40 +107,15 @@ const { user, isAuthenticated, isAdmin, logout } = useAuth()
             </UButton>
           </nav>
 
-          <nav
+          <div
             v-else
-            class="hidden md:flex items-center gap-1"
+            class="hidden md:flex items-center gap-2 text-xs text-slate-400 font-medium"
           >
-            <UButton
-              to="/market"
-              variant="ghost"
-              size="xs"
-              color="neutral"
-              icon="i-lucide-trending-up"
-            >
-              Market
-            </UButton>
-
-            <UButton
-              to="/crypto"
-              variant="ghost"
-              size="xs"
-              color="neutral"
-              icon="i-lucide-coins"
-            >
-              Crypto INR
-            </UButton>
-
-            <UButton
-              to="/weather"
-              variant="ghost"
-              size="xs"
-              color="neutral"
-              icon="i-lucide-cloud-sun"
-            >
-              Weather & AQI
-            </UButton>
-          </nav>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-mono border border-slate-200 dark:border-slate-700">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              Zero-Trust Boundary Active
+            </span>
+          </div>
         </ClientOnly>
       </div>
 

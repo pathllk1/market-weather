@@ -450,7 +450,7 @@ function initOrUpdateChart(
   if (showSma20.value && closePoints.length >= 20) {
     sma20Series = chart.addSeries(LineSeries, {
       color: '#3b82f6',
-      lineWidth: 1.5,
+      lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false
     })
@@ -461,7 +461,7 @@ function initOrUpdateChart(
   if (showSma50.value && closePoints.length >= 50) {
     sma50Series = chart.addSeries(LineSeries, {
       color: '#f59e0b',
-      lineWidth: 1.5,
+      lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false
     })

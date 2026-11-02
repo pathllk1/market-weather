@@ -2,7 +2,7 @@ import { getTursoClient } from '../../../utils/turso'
 import type { UserMarketView } from '~/types/market'
 
 export default defineEventHandler(async (event) => {
-  const userId = event.context.user?.id || 'guest_default_user'
+  const userId = event.context.user!.id
   const body = await readBody(event)
 
   const name = typeof body?.name === 'string' ? body.name.trim() : ''

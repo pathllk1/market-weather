@@ -4,7 +4,7 @@ import { initBacktestTables } from '../../../../utils/backtest-db'
 import type { BacktestTrade } from '~/types/backtest'
 
 export default defineEventHandler(async (event): Promise<BacktestTrade> => {
-  const userId = event.context.user?.id || 'guest_default_user'
+  const userId = event.context.user!.id
   const portfolioId = getRouterParam(event, 'id')
 
   if (!portfolioId) {

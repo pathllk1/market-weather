@@ -2,8 +2,7 @@
 import { useAuth } from '../composables/useAuth'
 
 definePageMeta({
-  layout: 'default',
-  middleware: 'auth'
+  layout: 'default'
 })
 
 const { user, session, isAdmin, logout } = useAuth()
@@ -15,99 +14,85 @@ function formatDate(ts?: number) {
 </script>
 
 <template>
-  <div class="w-full px-4 sm:px-8 py-6 space-y-6">
-    <!-- Status Banner (Full Width) -->
-    <SecurityBadge />
+  <div class="space-y-6">
+    <!-- Top Welcome Banner -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-2xs">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight text-slate-900">
+          Executive Dashboard
+        </h1>
+        <p class="text-sm text-slate-500 mt-1">
+          Welcome back, <span class="font-semibold text-slate-700">{{ user?.email }}</span>
+        </p>
+      </div>
 
-    <!-- User Profile Overview (Full Width) -->
-    <UCard class="w-full">
-      <template #header>
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div class="flex items-center gap-3">
-            <UIcon
-              name="i-lucide-user"
-              class="text-primary text-2xl"
-            />
-            <div>
-              <h2 class="text-lg font-bold">
-                ERP Operations Dashboard
-              </h2>
-              <p class="text-xs text-muted">
-                Authenticated enterprise user session
-              </p>
-            </div>
-          </div>
+      <div class="flex items-center gap-3">
+        <span
+          class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold capitalize tracking-wide"
+          :class="isAdmin ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'"
+        >
+          {{ user?.role }} clearance
+        </span>
+        <UButton
+          color="error"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-log-out"
+          @click="logout"
+        >
+          Sign Out
+        </UButton>
+      </div>
+    </div>
 
-          <div class="flex items-center gap-2">
-            <UButton
-              v-if="isAdmin"
-              to="/admin/security"
-              color="error"
-              variant="subtle"
-              size="sm"
-              icon="i-lucide-settings-2"
-            >
-              System Administration
-            </UButton>
-
-            <UButton
-              color="neutral"
-              variant="outline"
-              size="sm"
-              icon="i-lucide-log-out"
-              @click="logout"
-            >
-              Sign Out
-            </UButton>
-          </div>
+    <!-- Active Session Security Card -->
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div>
+          <h2 class="text-base font-semibold text-slate-800">
+            Active Enterprise Session
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">
+            Cryptographically signed session context stored via HttpOnly token binding
+          </p>
         </div>
-      </template>
+        <UIcon
+          name="i-lucide-shield-check"
+          class="w-6 h-6 text-emerald-500"
+        />
+      </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="p-3 border border-default rounded-md space-y-1">
-          <span class="text-xs text-muted">Account Email</span>
-          <div class="font-semibold text-sm truncate">
-            {{ user?.email }}
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+        <div class="p-3 bg-slate-50 rounded-lg border border-slate-100">
+          <div class="text-xs text-slate-400 font-medium uppercase tracking-wider">
+            Connected IP
           </div>
-          <UBadge
-            :color="isAdmin ? 'error' : 'primary'"
-            variant="subtle"
-            size="xs"
-          >
-            Role: {{ user?.role.toUpperCase() }}
-          </UBadge>
-        </div>
-
-        <div class="p-3 border border-default rounded-md space-y-1">
-          <span class="text-xs text-muted">Active Device Session</span>
-          <div class="font-semibold text-sm truncate">
-            {{ session?.deviceName || 'Current Device' }}
-          </div>
-          <div class="text-xs text-muted font-mono">
-            IP: {{ session?.ipAddress || 'Active Connection' }}
+          <div class="text-sm font-semibold text-slate-700 mt-1 font-mono">
+            {{ session?.ipAddress || 'Internal' }}
           </div>
         </div>
 
-        <div class="p-3 border border-default rounded-md space-y-1">
-          <span class="text-xs text-muted">Session Validity</span>
-          <div class="font-semibold text-sm">
-            {{ session?.expiresAt ? `${Math.max(1, Math.round((session.expiresAt - Date.now()) / (1000 * 60 * 60 * 24)))} Days Remaining` : 'Active Session' }}
+        <div class="p-3 bg-slate-50 rounded-lg border border-slate-100">
+          <div class="text-xs text-slate-400 font-medium uppercase tracking-wider">
+            Device Fingerprint
           </div>
-          <div class="text-xs text-muted">
-            Expires: {{ formatDate(session?.expiresAt) }}
+          <div class="text-sm font-semibold text-slate-700 mt-1 truncate">
+            {{ session?.deviceName || 'Authorized Workstation' }}
+          </div>
+        </div>
+
+        <div class="p-3 bg-slate-50 rounded-lg border border-slate-100">
+          <div class="text-xs text-slate-400 font-medium uppercase tracking-wider">
+            Session Established
+          </div>
+          <div class="text-sm font-semibold text-slate-700 mt-1">
+            {{ formatDate(session?.createdAt) }}
           </div>
         </div>
       </div>
-    </UCard>
-
-    <!-- Market Intelligence Pulse (Full Width) -->
-    <div class="w-full">
-      <MarketWatchWidget />
     </div>
 
-    <!-- Active Sessions Management (Full Width) -->
-    <div class="w-full">
-      <SessionList />
-    </div>
+    <!-- Active Session Manager Component -->
+    <SessionList />
   </div>
 </template>

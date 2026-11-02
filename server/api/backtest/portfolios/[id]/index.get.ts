@@ -3,7 +3,7 @@ import { initBacktestTables, computePortfolioDetails } from '../../../../utils/b
 import type { BacktestPortfolioDetailResponse } from '~/types/backtest'
 
 export default defineEventHandler(async (event): Promise<BacktestPortfolioDetailResponse> => {
-  const userId = event.context.user?.id || 'guest_default_user'
+  const userId = event.context.user!.id
   const portfolioId = getRouterParam(event, 'id')
 
   if (!portfolioId) {

@@ -1,11 +1,28 @@
-import { defineEventHandler, readBody } from 'h3'
+import { defineEventHandler, readBody, getHeader, createError } from 'h3'
 import { executeSmartSync } from '../../../utils/crypto-sync/sync-orchestrator'
 
+interface TriggerBody {
+  symbols?: string[]
+  seedDays?: number
+}
+
 export default defineEventHandler(async (event) => {
+  const authHeader = getHeader(event, 'x-sync-secret')
+  const cronSecret = process.env.CRON_SECRET
+  const isAdmin = event.context.user?.role === 'admin'
+
+  // Only users with admin role or callers with valid CRON_SECRET can trigger sync
+  if (!isAdmin && (!cronSecret || authHeader !== cronSecret)) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'Forbidden: Administrator clearance or valid sync secret required to initiate backfill'
+    })
+  }
+
   try {
-    const body = await readBody<{ symbols?: string[], seedDays?: number }>(event).catch(() => ({}))
-    const symbols = Array.isArray(body?.symbols) && body.symbols.length > 0 ? body.symbols : undefined
-    const seedDays = typeof body?.seedDays === 'number' && body.seedDays > 0 ? body.seedDays : 30
+    const body = ((await readBody(event).catch(() => null)) || {}) as TriggerBody
+    const symbols = Array.isArray(body.symbols) && body.symbols.length > 0 ? body.symbols : undefined
+    const seedDays = typeof body.seedDays === 'number' && body.seedDays > 0 ? body.seedDays : 30
 
     const report = await executeSmartSync(symbols, seedDays)
     return report
@@ -22,4 +39,3 @@ export default defineEventHandler(async (event) => {
     }
   }
 })
-

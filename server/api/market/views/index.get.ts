@@ -15,7 +15,7 @@ const DEFAULT_NIFTY_SYMBOLS = [
 ]
 
 export default defineEventHandler(async (event) => {
-  const userId = event.context.user?.id || 'guest_default_user'
+  const userId = event.context.user!.id
   const db = getTursoClient()
 
   // 1. Fetch user views

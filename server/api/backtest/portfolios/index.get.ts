@@ -3,7 +3,7 @@ import { initBacktestTables, computePortfolioDetails } from '../../../utils/back
 import type { BacktestPortfolio } from '~/types/backtest'
 
 export default defineEventHandler(async (event): Promise<{ portfolios: BacktestPortfolio[] }> => {
-  const userId = event.context.user?.id || 'guest_default_user'
+  const userId = event.context.user!.id
   await initBacktestTables()
 
   const db = getTursoClient()

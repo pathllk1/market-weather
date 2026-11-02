@@ -2,7 +2,7 @@ import { getTursoClient } from '../../../../utils/turso'
 import { initBacktestTables } from '../../../../utils/backtest-db'
 
 export default defineEventHandler(async (event) => {
-  const userId = event.context.user?.id || 'guest_default_user'
+  const userId = event.context.user!.id
   const portfolioId = getRouterParam(event, 'id')
 
   if (!portfolioId) {
