@@ -1,4 +1,4 @@
-import { defineEventHandler, getRequestPath, createError } from 'h3'
+import { defineEventHandler, getRequestPath, getHeader, createError } from 'h3'
 
 export default defineEventHandler((event) => {
   const path = getRequestPath(event)
@@ -23,7 +23,12 @@ export default defineEventHandler((event) => {
     path === '/api/auth/logout' ||
     path === '/api/auth/me'
 
-  if (isAuthWhitelisted) {
+  // Also exempt CRON background runner on sync trigger if valid secret is provided
+  const authHeader = getHeader(event, 'x-sync-secret')
+  const cronSecret = process.env.CRON_SECRET
+  const isCronAuthorized = Boolean(cronSecret && authHeader && authHeader === cronSecret)
+
+  if (isAuthWhitelisted || isCronAuthorized) {
     return
   }
 

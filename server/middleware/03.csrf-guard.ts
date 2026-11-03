@@ -24,6 +24,13 @@ export default defineEventHandler((event) => {
   // Only protect state-changing API endpoints
   if (!path.startsWith('/api/') || path.startsWith('/api/_nuxt_icon')) return
 
+  // Exempt background CRON requests with valid sync secret
+  const syncSecretHeader = getHeader(event, 'x-sync-secret')
+  const cronSecret = process.env.CRON_SECRET
+  if (cronSecret && syncSecretHeader && syncSecretHeader === cronSecret) {
+    return
+  }
+
   // Exempt auth bootstrap and teardown endpoints from strict CSRF check
   const isAuthExempt = path === '/api/auth/login' || path === '/api/auth/register' || path === '/api/auth/logout'
   const cookieCsrf = getCookie(event, COOKIE_CSRF_TOKEN)

@@ -9,13 +9,14 @@ interface TriggerBody {
 export default defineEventHandler(async (event) => {
   const authHeader = getHeader(event, 'x-sync-secret')
   const cronSecret = process.env.CRON_SECRET
-  const isAdmin = event.context.user?.role === 'admin'
+  const isCronAuthorized = Boolean(cronSecret && authHeader && authHeader === cronSecret)
+  const isAuthUser = Boolean(event.context.user && event.context.user.id)
 
-  // Only users with admin role or callers with valid CRON_SECRET can trigger sync
-  if (!isAdmin && (!cronSecret || authHeader !== cronSecret)) {
+  // Allow any authenticated enterprise session OR automated runner with valid CRON_SECRET
+  if (!isAuthUser && !isCronAuthorized) {
     throw createError({
       statusCode: 403,
-      statusMessage: 'Forbidden: Administrator clearance or valid sync secret required to initiate backfill'
+      statusMessage: 'Forbidden: Authenticated session or valid sync secret required to initiate backfill'
     })
   }
 

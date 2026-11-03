@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { getCsrfTokenFromCookie } from '../../utils/csrf'
 
 const props = defineProps<{
   tickers?: Array<{ symbol: string, baseAsset?: string, quoteAsset?: string, name?: string }>
@@ -191,6 +192,7 @@ async function startBatchSync() {
     currentSymbol.value = symbol
 
     try {
+      const csrf = getCsrfTokenFromCookie()
       const res = await $fetch<{
         success: boolean
         totalInserted: number
@@ -203,6 +205,9 @@ async function startBatchSync() {
         }>
       }>('/api/crypto/sync/trigger', {
         method: 'POST',
+        headers: {
+          ...(csrf ? { 'X-CSRF-Token': csrf } : {})
+        },
         body: { symbols: [symbol], seedDays: 30 }
       })
 
