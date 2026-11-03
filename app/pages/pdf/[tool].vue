@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { usePdfEngine, type PageThumbnail } from '../../composables/usePdfEngine'
+import {
+  usePdfEngine,
+  type PageThumbnail,
+  type CompressResult,
+  type PageImageOutput,
+  type PdfToExcelResult,
+  type PdfToWordResult
+} from '../../composables/usePdfEngine'
 import PdfDropZone from '../../components/pdf/PdfDropZone.vue'
 import PdfPageGrid from '../../components/pdf/PdfPageGrid.vue'
 import PdfFileCardGrid, { type DocumentFileCard } from '../../components/pdf/PdfFileCardGrid.vue'
@@ -23,6 +30,42 @@ const toolMetadata: Record<string, { title: string; desc: string; icon: string; 
     icon: 'i-lucide-scissors',
     action: 'Extract & Download',
     multiple: false
+  },
+  compress: {
+    title: 'Compress PDF Document',
+    desc: 'Reduce file size by 30% to 85% with smart vector stream indexing or portal-ready quantization.',
+    icon: 'i-lucide-minimize-2',
+    action: 'Compress & Download',
+    multiple: false
+  },
+  'pdf-to-excel': {
+    title: 'Convert PDF to Excel (.xlsx / .csv)',
+    desc: 'Extract financial ledgers, balance sheets, and invoices into structured Excel spreadsheets.',
+    icon: 'i-lucide-table',
+    action: 'Extract & Download',
+    multiple: false
+  },
+  'pdf-to-word': {
+    title: 'Convert PDF to Word (.docx)',
+    desc: 'Convert your PDF document into an editable Microsoft Word document with reflowed headings and tables.',
+    icon: 'i-lucide-file-text',
+    action: 'Convert to Word',
+    multiple: false
+  },
+  'pdf-to-image': {
+    title: 'Convert PDF to High-Res Images',
+    desc: 'Extract every page into crisp PNG, JPG, or WebP images with single-click multi-page ZIP export.',
+    icon: 'i-lucide-image',
+    action: 'Convert & Download',
+    multiple: false
+  },
+  'images-to-pdf': {
+    title: 'Convert Images to PDF',
+    desc: 'Combine JPG and PNG images into a presentation-grade consolidated PDF.',
+    icon: 'i-lucide-file-image',
+    action: 'Convert & Download',
+    multiple: true,
+    accept: 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg'
   },
   rotate: {
     title: 'Rotate PDF Pages',
@@ -51,28 +94,6 @@ const toolMetadata: Record<string, { title: string; desc: string; icon: string; 
     icon: 'i-lucide-hash',
     action: 'Number & Download',
     multiple: false
-  },
-  'images-to-pdf': {
-    title: 'Convert Images to PDF',
-    desc: 'Combine JPG and PNG images into a presentation-grade consolidated PDF.',
-    icon: 'i-lucide-image',
-    action: 'Convert & Download',
-    multiple: true,
-    accept: 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg'
-  },
-  protect: {
-    title: 'Encrypt & Protect PDF',
-    desc: 'Add password encryption to your PDF document to restrict viewing.',
-    icon: 'i-lucide-lock',
-    action: 'Encrypt & Download',
-    multiple: false
-  },
-  unlock: {
-    title: 'Unlock Password-Protected PDF',
-    desc: 'Remove password restrictions from an encrypted PDF using your known password.',
-    icon: 'i-lucide-unlock',
-    action: 'Decrypt & Download',
-    multiple: false
   }
 }
 
@@ -96,6 +117,10 @@ const {
   watermarkPdf,
   addPageNumbers,
   imagesToPdf,
+  compressPdf,
+  pdfToImages,
+  pdfToExcel,
+  pdfToWord,
   inspectPdf,
   renderPageThumbnail,
   renderAllPageThumbnails,
@@ -118,7 +143,22 @@ const watermarkOpacity = ref(0.25)
 const watermarkAngle = ref(-45)
 const pageNumberFormat = ref<'number' | 'page_of_total'>('page_of_total')
 const pageNumberPosition = ref<'bottom-center' | 'bottom-right' | 'bottom-left' | 'top-right'>('bottom-center')
-const docPassword = ref('')
+
+// 1. Compress Options & Result
+const compressTier = ref<'lossless' | 'balanced' | 'extreme'>('balanced')
+const compressStats = ref<CompressResult | null>(null)
+
+// 2. PDF to Image Options & Result
+const imageFormat = ref<'png' | 'jpeg' | 'webp'>('png')
+const imageDpiScale = ref<number>(2) // 1=75 DPI, 2=150 DPI, 4=300 DPI
+const imageOutputs = ref<PageImageOutput[]>([])
+
+// 3. PDF to Excel Options & Result
+const excelFormat = ref<'xlsx' | 'csv'>('xlsx')
+const excelStats = ref<PdfToExcelResult | null>(null)
+
+// 4. PDF to Word Options & Result
+const wordStats = ref<PdfToWordResult | null>(null)
 
 async function handleFilesSelected(files: File[]) {
   if (currentTool.value.multiple) {
@@ -171,6 +211,12 @@ async function handleFilesSelected(files: File[]) {
     selectedFiles.value = [files[0]!]
     const targetFile = selectedFiles.value[0]!
 
+    // Reset previous results
+    compressStats.value = null
+    imageOutputs.value = []
+    excelStats.value = null
+    wordStats.value = null
+
     // If tool uses page grid, inspect & render page previews
     if (['split', 'rotate', 'remove-pages', 'watermark', 'page-numbers'].includes(toolId.value)) {
       isLoadingThumbnails.value = true
@@ -193,6 +239,11 @@ async function handleFilesSelected(files: File[]) {
         }
       }).finally(() => {
         isLoadingThumbnails.value = false
+      })
+    } else {
+      // General inspection
+      inspectPdf(targetFile).then(inspect => {
+        totalDocumentPages.value = inspect.numPages
       })
     }
   }
@@ -250,6 +301,10 @@ function resetAll() {
   pageRotations.value.clear()
   totalDocumentPages.value = 0
   isLoadingThumbnails.value = false
+  compressStats.value = null
+  imageOutputs.value = []
+  excelStats.value = null
+  wordStats.value = null
 }
 
 const canExecute = computed(() => {
@@ -275,16 +330,47 @@ async function executeCurrentAction() {
         : selectedFiles.value
       outputBytes = await mergePdfs(orderedFiles)
       outputFilename = 'Consolidated_Merged_Document.pdf'
+      if (outputBytes) downloadBlob(outputBytes, outputFilename)
     } else if (toolId.value === 'split') {
       outputBytes = await splitPdf(firstFile, splitRange.value)
       outputFilename = `${baseName}_split.pdf`
+      if (outputBytes) downloadBlob(outputBytes, outputFilename)
+    } else if (toolId.value === 'compress') {
+      const res = await compressPdf(firstFile, compressTier.value)
+      compressStats.value = res
+      downloadBlob(res.bytes, `${baseName}_compressed.pdf`)
+    } else if (toolId.value === 'pdf-to-image') {
+      const res = await pdfToImages(firstFile, {
+        format: imageFormat.value,
+        dpiScale: imageDpiScale.value
+      })
+      imageOutputs.value = res.images
+      if (res.zipBlob && res.zipFilename) {
+        downloadBlob(res.zipBlob, res.zipFilename, 'application/zip')
+      } else if (res.images[0]) {
+        const mime = imageFormat.value === 'png' ? 'image/png' : imageFormat.value === 'webp' ? 'image/webp' : 'image/jpeg'
+        downloadBlob(res.images[0].blob, res.images[0].filename, mime)
+      }
+    } else if (toolId.value === 'pdf-to-excel') {
+      const res = await pdfToExcel(firstFile, { format: excelFormat.value })
+      excelStats.value = res
+      const mime = excelFormat.value === 'csv'
+        ? 'text/csv'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      downloadBlob(res.data, res.filename, mime)
+    } else if (toolId.value === 'pdf-to-word') {
+      const res = await pdfToWord(firstFile)
+      wordStats.value = res
+      downloadBlob(res.blob, res.filename, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     } else if (toolId.value === 'rotate') {
       outputBytes = await rotatePdf(firstFile, pageRotations.value)
       outputFilename = `${baseName}_rotated.pdf`
+      if (outputBytes) downloadBlob(outputBytes, outputFilename)
     } else if (toolId.value === 'remove-pages') {
       const toDelete = pages.value.filter(p => p.isDeleted).map(p => p.pageNumber - 1)
       outputBytes = await removePages(firstFile, toDelete)
       outputFilename = `${baseName}_trimmed.pdf`
+      if (outputBytes) downloadBlob(outputBytes, outputFilename)
     } else if (toolId.value === 'watermark') {
       outputBytes = await watermarkPdf(firstFile, {
         text: watermarkText.value,
@@ -292,25 +378,38 @@ async function executeCurrentAction() {
         angle: watermarkAngle.value
       })
       outputFilename = `${baseName}_watermarked.pdf`
+      if (outputBytes) downloadBlob(outputBytes, outputFilename)
     } else if (toolId.value === 'page-numbers') {
       outputBytes = await addPageNumbers(firstFile, {
         format: pageNumberFormat.value,
         position: pageNumberPosition.value
       })
       outputFilename = `${baseName}_numbered.pdf`
+      if (outputBytes) downloadBlob(outputBytes, outputFilename)
     } else if (toolId.value === 'images-to-pdf') {
       const orderedFiles = documentCards.value.length > 0
         ? documentCards.value.map(d => d.file)
         : selectedFiles.value
       outputBytes = await imagesToPdf(orderedFiles)
       outputFilename = 'Images_Presentation.pdf'
-    }
-
-    if (outputBytes) {
-      downloadBlob(outputBytes, outputFilename)
+      if (outputBytes) downloadBlob(outputBytes, outputFilename)
     }
   } catch (err) {
     console.error('Operation failed:', err)
+  }
+}
+
+function copyImageToClipboard(img: PageImageOutput) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard && (window as any).ClipboardItem) {
+    try {
+      const item = new (window as any).ClipboardItem({ [img.blob.type]: img.blob })
+      navigator.clipboard.write([item])
+      alert(`Page ${img.pageNumber} copied to clipboard!`)
+    } catch {
+      window.open(img.dataUrl, '_blank')
+    }
+  } else {
+    window.open(img.dataUrl, '_blank')
   }
 }
 </script>
@@ -335,7 +434,7 @@ async function executeCurrentAction() {
           name="i-lucide-cpu"
           class="w-3.5 h-3.5 text-primary"
         />
-        Local Client Execution
+        Local Client Execution • $0 Cloud Cost
       </span>
     </div>
 
@@ -385,7 +484,7 @@ async function executeCurrentAction() {
       v-else
       class="space-y-6"
     >
-      <!-- File Management Cards (Matches iLovePDF Document Grid Preview) -->
+      <!-- Multi-File Card Grid (For Merge & Images-to-PDF) -->
       <div
         v-if="currentTool.multiple"
         class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs"
@@ -400,9 +499,345 @@ async function executeCurrentAction() {
         />
       </div>
 
-      <!-- Tool Configuration Controls -->
+      <!-- Single File Selected Strip -->
+      <div
+        v-else
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex items-center justify-between"
+      >
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+            <UIcon
+              name="i-lucide-file-text"
+              class="w-5 h-5"
+            />
+          </div>
+          <div>
+            <div class="text-xs font-bold text-slate-900 dark:text-slate-100">
+              {{ selectedFiles[0]?.name }}
+            </div>
+            <div class="text-[11px] text-slate-400 font-mono">
+              {{ formatBytes(selectedFiles[0]?.size || 0) }} • {{ totalDocumentPages }} pages detected
+            </div>
+          </div>
+        </div>
 
-      <!-- Split Range Config -->
+        <UButton
+          variant="ghost"
+          size="xs"
+          color="neutral"
+          icon="i-lucide-refresh-cw"
+          @click="resetAll"
+        >
+          Change Document
+        </UButton>
+      </div>
+
+      <!-- ==================== TOOL CONFIGURATIONS ==================== -->
+
+      <!-- 1. Compress Tool Options -->
+      <div
+        v-if="toolId === 'compress'"
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4"
+      >
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <UIcon
+            name="i-lucide-sliders"
+            class="w-4 h-4 text-primary"
+          />
+          Compression Strategy
+        </h3>
+
+        <!-- 3-Tier Radio Selection -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <!-- Tier 1: Smart Vector -->
+          <label
+            class="border-2 rounded-xl p-4 cursor-pointer transition-all flex flex-col justify-between"
+            :class="compressTier === 'lossless' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'"
+          >
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-900 dark:text-slate-100">Smart Vector</span>
+                <input
+                  v-model="compressTier"
+                  type="radio"
+                  value="lossless"
+                  class="text-primary"
+                >
+              </div>
+              <p class="text-[11px] text-slate-500 leading-relaxed">
+                Compacts indirect object streams. 100% vector crispness, text remains selectable.
+              </p>
+            </div>
+            <span class="mt-3 inline-block text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 w-fit">
+              ~20% - 35% Savings
+            </span>
+          </label>
+
+          <!-- Tier 2: Balanced -->
+          <label
+            class="border-2 rounded-xl p-4 cursor-pointer transition-all flex flex-col justify-between"
+            :class="compressTier === 'balanced' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'"
+          >
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-900 dark:text-slate-100">Balanced (Recommended)</span>
+                <input
+                  v-model="compressTier"
+                  type="radio"
+                  value="balanced"
+                  class="text-primary"
+                >
+              </div>
+              <p class="text-[11px] text-slate-500 leading-relaxed">
+                150 DPI calibrated quantization. Greatly reduces heavy embedded images & scans.
+              </p>
+            </div>
+            <span class="mt-3 inline-block text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 w-fit">
+              ~50% - 70% Savings
+            </span>
+          </label>
+
+          <!-- Tier 3: Extreme -->
+          <label
+            class="border-2 rounded-xl p-4 cursor-pointer transition-all flex flex-col justify-between"
+            :class="compressTier === 'extreme' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'"
+          >
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-900 dark:text-slate-100">Maximum Upload</span>
+                <input
+                  v-model="compressTier"
+                  type="radio"
+                  value="extreme"
+                  class="text-primary"
+                >
+              </div>
+              <p class="text-[11px] text-slate-500 leading-relaxed">
+                High-efficiency 96 DPI downsampling. Engineered for government portals & email attachments.
+              </p>
+            </div>
+            <span class="mt-3 inline-block text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 w-fit">
+              ~75% - 88% Savings
+            </span>
+          </label>
+        </div>
+
+        <!-- Savings Success Banner (Appears after compression) -->
+        <div
+          v-if="compressStats"
+          class="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 flex items-center justify-between"
+        >
+          <div class="flex items-center gap-2">
+            <UIcon
+              name="i-lucide-check-circle"
+              class="w-4 h-4 text-emerald-500 shrink-0"
+            />
+            <span>
+              Compressed from <b>{{ formatBytes(compressStats.originalSize) }}</b> down to <b>{{ formatBytes(compressStats.compressedSize) }}</b>. Saved {{ compressStats.savingsFormatted }}!
+            </span>
+          </div>
+          <span class="font-mono font-bold text-sm bg-emerald-200 dark:bg-emerald-900 px-2.5 py-0.5 rounded-full">
+            -{{ compressStats.ratioPercent }}%
+          </span>
+        </div>
+      </div>
+
+      <!-- 2. PDF to Image Options -->
+      <div
+        v-if="toolId === 'pdf-to-image'"
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4"
+      >
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <UIcon
+            name="i-lucide-sliders"
+            class="w-4 h-4 text-primary"
+          />
+          Image Resolution & Output Format
+        </h3>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+          <UFormField label="Image Format">
+            <select
+              v-model="imageFormat"
+              class="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+            >
+              <option value="png">
+                PNG (Lossless, Sharp Vector Lines)
+              </option>
+              <option value="jpeg">
+                JPEG (Standard Compact Format)
+              </option>
+              <option value="webp">
+                WebP (Modern High-Efficiency)
+              </option>
+            </select>
+          </UFormField>
+
+          <UFormField label="Resolution / DPI Scale">
+            <select
+              v-model.number="imageDpiScale"
+              class="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+            >
+              <option :value="1">
+                Standard Web (75 DPI / 1x)
+              </option>
+              <option :value="2">
+                Retina Display (150 DPI / 2x - Recommended)
+              </option>
+              <option :value="4">
+                Ultra-Sharp Print (300 DPI / 4x)
+              </option>
+            </select>
+          </UFormField>
+        </div>
+
+        <p class="text-xs text-slate-400">
+          • Documents with multiple pages are automatically compiled into a single convenient <b>.ZIP</b> package.
+        </p>
+
+        <!-- Converted Images Gallery -->
+        <div
+          v-if="imageOutputs.length > 0"
+          class="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800"
+        >
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-700 dark:text-slate-200">
+              Generated Images ({{ imageOutputs.length }})
+            </span>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+            <div
+              v-for="img in imageOutputs"
+              :key="img.pageNumber"
+              class="border border-slate-200 dark:border-slate-800 rounded-xl p-2 bg-slate-50 dark:bg-slate-800/50 space-y-1.5 text-center group"
+            >
+              <div class="w-full aspect-[3/4] bg-white rounded overflow-hidden flex items-center justify-center border shadow-xs">
+                <img
+                  :src="img.dataUrl"
+                  :alt="img.filename"
+                  class="max-h-full max-w-full object-contain"
+                >
+              </div>
+              <div class="text-[10px] font-mono text-slate-600 truncate">
+                Page {{ img.pageNumber }} ({{ img.sizeFormatted }})
+              </div>
+              <button
+                type="button"
+                class="w-full text-[10px] py-1 rounded bg-slate-200 dark:bg-slate-700 hover:bg-primary hover:text-white transition-colors cursor-pointer"
+                @click="copyImageToClipboard(img)"
+              >
+                Copy Image
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. PDF to Excel Options -->
+      <div
+        v-if="toolId === 'pdf-to-excel'"
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4"
+      >
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <UIcon
+            name="i-lucide-sliders"
+            class="w-4 h-4 text-primary"
+          />
+          Spreadsheet Extraction Format
+        </h3>
+
+        <div class="max-w-md space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <label
+              class="border-2 rounded-xl p-3 cursor-pointer flex items-center justify-between"
+              :class="excelFormat === 'xlsx' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800'"
+            >
+              <div>
+                <div class="text-xs font-bold text-slate-900 dark:text-slate-100">Excel (.xlsx)</div>
+                <div class="text-[10px] text-slate-400">Styled header & formulas</div>
+              </div>
+              <input
+                v-model="excelFormat"
+                type="radio"
+                value="xlsx"
+              >
+            </label>
+
+            <label
+              class="border-2 rounded-xl p-3 cursor-pointer flex items-center justify-between"
+              :class="excelFormat === 'csv' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800'"
+            >
+              <div>
+                <div class="text-xs font-bold text-slate-900 dark:text-slate-100">Raw CSV (.csv)</div>
+                <div class="text-[10px] text-slate-400">Universal data format</div>
+              </div>
+              <input
+                v-model="excelFormat"
+                type="radio"
+                value="csv"
+              >
+            </label>
+          </div>
+
+          <p class="text-xs text-slate-400 leading-relaxed">
+            • Spatial coordinate engine automatically groups table columns, rows, numbers, and currencies into structured spreadsheet cells.
+          </p>
+        </div>
+
+        <!-- Extraction Stats Banner -->
+        <div
+          v-if="excelStats"
+          class="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 flex items-center gap-2"
+        >
+          <UIcon
+            name="i-lucide-check-circle"
+            class="w-4 h-4 text-emerald-500 shrink-0"
+          />
+          <span>
+            Successfully extracted <b>{{ excelStats.rowCount }} rows</b> and <b>{{ excelStats.colCount }} columns</b> into <b>{{ excelStats.filename }}</b>.
+          </span>
+        </div>
+      </div>
+
+      <!-- 4. PDF to Word Options -->
+      <div
+        v-if="toolId === 'pdf-to-word'"
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4"
+      >
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <UIcon
+            name="i-lucide-sliders"
+            class="w-4 h-4 text-primary"
+          />
+          Word Document Reflow Settings
+        </h3>
+
+        <div class="max-w-lg space-y-2 text-xs text-slate-500 leading-relaxed">
+          <p>
+            • The in-browser reflow engine analyzes document typography to synthesize <b>Heading 1</b>, <b>Heading 2</b>, continuous body paragraphs, and native <b>Word Tables</b>.
+          </p>
+          <p>
+            • Output format: <b>Microsoft Word Document (.docx)</b> compatible with Microsoft Word, Google Docs, Apple Pages, and LibreOffice.
+          </p>
+        </div>
+
+        <!-- Word Stats Banner -->
+        <div
+          v-if="wordStats"
+          class="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 flex items-center gap-2"
+        >
+          <UIcon
+            name="i-lucide-check-circle"
+            class="w-4 h-4 text-emerald-500 shrink-0"
+          />
+          <span>
+            Compiled <b>{{ wordStats.paragraphsCount }} paragraphs and tables</b> into <b>{{ wordStats.filename }}</b>.
+          </span>
+        </div>
+      </div>
+
+      <!-- 5. Split Range Config -->
       <div
         v-if="toolId === 'split'"
         class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4"
@@ -417,7 +852,7 @@ async function executeCurrentAction() {
         <div class="max-w-md space-y-2">
           <UFormField
             label="Page Ranges to Extract"
-            help="Total pages detected: {{ totalDocumentPages }}. Example: 1-3, 5, 8-10"
+            :help="`Total pages detected: ${totalDocumentPages}. Example: 1-3, 5, 8-10`"
           >
             <UInput
               v-model="splitRange"
@@ -429,7 +864,7 @@ async function executeCurrentAction() {
         </div>
       </div>
 
-      <!-- Watermark Configuration -->
+      <!-- 6. Watermark Configuration -->
       <div
         v-if="toolId === 'watermark'"
         class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4"
@@ -450,7 +885,7 @@ async function executeCurrentAction() {
             />
           </UFormField>
 
-          <UFormField label="Opacity ({{ Math.round(watermarkOpacity * 100) }}%)">
+          <UFormField :label="`Opacity (${Math.round(watermarkOpacity * 100)}%)`">
             <input
               v-model.number="watermarkOpacity"
               type="range"
@@ -461,7 +896,7 @@ async function executeCurrentAction() {
             >
           </UFormField>
 
-          <UFormField label="Rotation Angle ({{ watermarkAngle }}°)">
+          <UFormField :label="`Rotation Angle (${watermarkAngle}°)`">
             <input
               v-model.number="watermarkAngle"
               type="range"
@@ -474,7 +909,7 @@ async function executeCurrentAction() {
         </div>
       </div>
 
-      <!-- Page Numbers Configuration -->
+      <!-- 7. Page Numbers Configuration -->
       <div
         v-if="toolId === 'page-numbers'"
         class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4"
@@ -523,7 +958,7 @@ async function executeCurrentAction() {
         </div>
       </div>
 
-      <!-- Visual Page Grid (For Rotate & Remove Pages) -->
+      <!-- 8. Visual Page Grid (For Rotate & Remove Pages) -->
       <div
         v-if="pages.length > 0 && ['rotate', 'remove-pages'].includes(toolId)"
         class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs"
@@ -552,4 +987,3 @@ async function executeCurrentAction() {
     </div>
   </div>
 </template>
-

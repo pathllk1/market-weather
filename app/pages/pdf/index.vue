@@ -44,6 +44,50 @@ const tools: PdfTool[] = [
     to: '/pdf/split'
   },
   {
+    id: 'compress',
+    title: 'Compress PDF',
+    description: 'Reduce file size by 30% to 85% while keeping vector text sharp or optimizing for portal uploads.',
+    icon: 'i-lucide-minimize-2',
+    category: 'optimize',
+    badge: 'Essential',
+    to: '/pdf/compress'
+  },
+  {
+    id: 'pdf-to-excel',
+    title: 'PDF to Excel',
+    description: 'Extract financial statements and tables into structured .xlsx spreadsheets or clean CSV format.',
+    icon: 'i-lucide-table',
+    category: 'convert',
+    badge: 'Smart Tables',
+    to: '/pdf/pdf-to-excel'
+  },
+  {
+    id: 'pdf-to-word',
+    title: 'PDF to Word',
+    description: 'Convert PDF documents into editable Microsoft Word (.docx) files with heading & table reflow.',
+    icon: 'i-lucide-file-text',
+    category: 'convert',
+    badge: 'Reflow',
+    to: '/pdf/pdf-to-word'
+  },
+  {
+    id: 'pdf-to-image',
+    title: 'PDF to Image',
+    description: 'Convert PDF pages into high-DPI PNG, JPG, or WebP images with single-click multi-page ZIP export.',
+    icon: 'i-lucide-image',
+    category: 'convert',
+    badge: 'High-Res',
+    to: '/pdf/pdf-to-image'
+  },
+  {
+    id: 'images-to-pdf',
+    title: 'JPG & PNG to PDF',
+    description: 'Convert image files into a single presentation-grade PDF document with auto-fit margins.',
+    icon: 'i-lucide-file-image',
+    category: 'convert',
+    to: '/pdf/images-to-pdf'
+  },
+  {
     id: 'rotate',
     title: 'Rotate PDF',
     description: 'Rotate specific pages or entire documents 90°, 180°, or 270° clockwise with live previews.',
@@ -75,31 +119,6 @@ const tools: PdfTool[] = [
     icon: 'i-lucide-hash',
     category: 'optimize',
     to: '/pdf/page-numbers'
-  },
-  {
-    id: 'images-to-pdf',
-    title: 'JPG & PNG to PDF',
-    description: 'Convert image files into a single presentation-grade PDF document with auto-fit margins.',
-    icon: 'i-lucide-image',
-    category: 'convert',
-    to: '/pdf/images-to-pdf'
-  },
-  {
-    id: 'protect',
-    title: 'Protect PDF',
-    description: 'Encrypt your document with passwords to restrict unauthorized viewing and printing.',
-    icon: 'i-lucide-lock',
-    category: 'security',
-    badge: 'Zero-Trust',
-    to: '/pdf/protect'
-  },
-  {
-    id: 'unlock',
-    title: 'Unlock PDF',
-    description: 'Remove password protection from encrypted documents using your known password.',
-    icon: 'i-lucide-unlock',
-    category: 'security',
-    to: '/pdf/unlock'
   }
 ]
 
