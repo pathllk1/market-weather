@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+
 export interface DocumentFileCard {
   id: string
   file: File
@@ -10,17 +12,19 @@ export interface DocumentFileCard {
   isLoadingThumbnail?: boolean
 }
 
-const props = defineProps<{
+defineProps<{
   files: DocumentFileCard[]
   accept?: string
 }>()
 
 const emit = defineEmits<{
-  (e: 'removeFile', index: number): void
-  (e: 'rotateFile', index: number): void
+  (e: 'removeFile' | 'rotateFile', index: number): void
   (e: 'moveFile', fromIndex: number, toIndex: number): void
   (e: 'addFiles', files: File[]): void
 }>()
+
+const draggedIndex = ref<number | null>(null)
+const dragOverIndex = ref<number | null>(null)
 
 function handleFileInput(e: Event) {
   const target = e.target as HTMLInputElement
@@ -28,17 +32,61 @@ function handleFileInput(e: Event) {
   emit('addFiles', Array.from(target.files))
   target.value = ''
 }
+
+function onDragStart(e: DragEvent, index: number) {
+  draggedIndex.value = index
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(index))
+  }
+}
+
+function onDragOver(e: DragEvent, index: number) {
+  e.preventDefault()
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'move'
+  }
+  if (draggedIndex.value !== null && draggedIndex.value !== index) {
+    dragOverIndex.value = index
+  }
+}
+
+function onDragLeave(e: DragEvent, index: number) {
+  if (dragOverIndex.value === index) {
+    dragOverIndex.value = null
+  }
+}
+
+function onDrop(e: DragEvent, toIndex: number) {
+  e.preventDefault()
+  const fromIndex = draggedIndex.value
+  draggedIndex.value = null
+  dragOverIndex.value = null
+
+  if (fromIndex !== null && fromIndex !== toIndex) {
+    emit('moveFile', fromIndex, toIndex)
+  }
+}
+
+function onDragEnd() {
+  draggedIndex.value = null
+  dragOverIndex.value = null
+}
 </script>
 
 <template>
   <div class="space-y-4">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">
+        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+          <UIcon
+            name="i-lucide-grip-vertical"
+            class="w-4 h-4 text-primary"
+          />
           Selected Documents ({{ files.length }})
         </h3>
         <span class="text-xs text-slate-400">
-          • Reorder or rotate documents before processing
+          • Drag & drop cards to reorder files for merging
         </span>
       </div>
 
@@ -58,16 +106,27 @@ function handleFileInput(e: Event) {
       </label>
     </div>
 
-    <!-- Cards Grid (matches iLovePDF card preview style) -->
+    <!-- Cards Grid (Drag and Drop Sortable) -->
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
       <div
         v-for="(doc, idx) in files"
         :key="doc.id"
-        class="group relative bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 shadow-xs hover:shadow-xl hover:border-primary/50"
+        draggable="true"
+        class="group relative bg-white dark:bg-slate-900 border rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 shadow-xs cursor-grab active:cursor-grabbing select-none"
+        :class="[
+          draggedIndex === idx ? 'opacity-30 scale-95 border-dashed border-primary shadow-inner' : '',
+          dragOverIndex === idx ? 'ring-2 ring-primary ring-offset-2 border-primary scale-102 bg-primary/5 shadow-xl' : 'border-slate-200/90 dark:border-slate-800 hover:shadow-xl hover:border-primary/50'
+        ]"
+        @dragstart="onDragStart($event, idx)"
+        @dragover="onDragOver($event, idx)"
+        @dragenter="onDragOver($event, idx)"
+        @dragleave="onDragLeave($event, idx)"
+        @drop="onDrop($event, idx)"
+        @dragend="onDragEnd"
       >
         <!-- Top Controls Overlay (Visible on hover) -->
         <div class="absolute top-2.5 inset-x-2.5 z-10 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
-          <!-- Move Left / Right -->
+          <!-- Move Left / Right Click Fallback -->
           <div class="flex items-center gap-1 bg-slate-900/80 backdrop-blur-md rounded-lg p-0.5 text-white shadow-xs">
             <button
               type="button"
@@ -133,14 +192,14 @@ function handleFileInput(e: Event) {
             <img
               :src="doc.thumbnailUrl"
               :alt="doc.name"
-              class="max-h-full max-w-full object-contain rounded-sm shadow-md border border-slate-200/90 dark:border-slate-700 bg-white"
+              class="max-h-full max-w-full object-contain rounded-sm shadow-md border border-slate-200/90 dark:border-slate-700 bg-white pointer-events-none"
             >
           </div>
 
           <!-- Loading Shimmer Skeleton while canvas renders -->
           <div
             v-else-if="doc.isLoadingThumbnail"
-            class="w-full h-full flex flex-col items-center justify-center text-slate-300 dark:text-slate-600 space-y-2 animate-pulse"
+            class="w-full h-full flex flex-col items-center justify-center text-slate-300 dark:text-slate-600 space-y-2 animate-pulse pointer-events-none"
           >
             <UIcon
               name="i-lucide-file-text"
@@ -152,7 +211,7 @@ function handleFileInput(e: Event) {
           <!-- Document Mockup Fallback if canvas is not supported/delayed -->
           <div
             v-else
-            class="w-full h-full bg-white dark:bg-slate-800 rounded-sm shadow-xs border border-slate-200 dark:border-slate-700 p-3 flex flex-col justify-between"
+            class="w-full h-full bg-white dark:bg-slate-800 rounded-sm shadow-xs border border-slate-200 dark:border-slate-700 p-3 flex flex-col justify-between pointer-events-none"
             :style="{ transform: `rotate(${doc.rotation}deg)` }"
           >
             <div class="space-y-1.5 opacity-60">
@@ -226,4 +285,3 @@ function handleFileInput(e: Event) {
     </div>
   </div>
 </template>
-

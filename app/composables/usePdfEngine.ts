@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib'
 import { getDocumentProxy, renderPageAsImage, extractTextItems } from 'unpdf'
 import ExcelJS from 'exceljs'
-import { Document, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, Packer } from 'docx'
+import { Document, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType, BorderStyle, AlignmentType, PageBreak, Packer } from 'docx'
 import JSZip from 'jszip'
 
 export interface PageThumbnail {
@@ -70,6 +70,8 @@ export interface PdfToImageResult {
 
 export interface PdfToExcelOptions {
   format?: 'xlsx' | 'csv'
+  sheetMode?: 'multi_sheet' | 'single_sheet'
+  tableOnly?: boolean
 }
 
 export interface PdfToExcelResult {
@@ -77,12 +79,20 @@ export interface PdfToExcelResult {
   filename: string
   rowCount: number
   colCount: number
+  tableCount: number
+  previewRows?: (string | number)[][]
+}
+
+export interface PdfToWordOptions {
+  preservePageBreaks?: boolean
 }
 
 export interface PdfToWordResult {
   blob: Blob
   filename: string
   paragraphsCount: number
+  tablesCount: number
+  headingsCount: number
 }
 
 export function usePdfEngine() {
@@ -190,6 +200,53 @@ export function usePdfEngine() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       errorMessage.value = `Rotation failed: ${msg}`
+      throw err
+    } finally {
+      isProcessing.value = false
+    }
+  }
+
+  // 3b. Organize: Sort/Reorder, Rotate, and Exclude Pages visually
+  async function organizePdf(
+    file: File,
+    orderedPages: { pageNumber: number; rotation: number; isDeleted: boolean }[]
+  ): Promise<Uint8Array> {
+    isProcessing.value = true
+    errorMessage.value = null
+    progressPercent.value = 15
+    statusMessage.value = 'Loading document pages for reorganization...'
+
+    try {
+      const activePages = orderedPages.filter(p => !p.isDeleted)
+      if (activePages.length === 0) {
+        throw new Error('At least one page must remain in the document.')
+      }
+
+      const buffer = await file.arrayBuffer()
+      const srcDoc = await PDFDocument.load(buffer, { ignoreEncryption: true })
+      const newDoc = await PDFDocument.create()
+
+      statusMessage.value = `Assembling ${activePages.length} pages in custom order...`
+      const pageIndices = activePages.map(p => p.pageNumber - 1)
+      const copiedPages = await newDoc.copyPages(srcDoc, pageIndices)
+
+      copiedPages.forEach((page, idx) => {
+        const rot = activePages[idx]?.rotation || 0
+        if (rot !== 0) {
+          const currentRotation = page.getRotation().angle
+          page.setRotation(degrees((currentRotation + rot) % 360))
+        }
+        newDoc.addPage(page)
+      })
+
+      progressPercent.value = 85
+      statusMessage.value = 'Finalizing organized document...'
+      const output = await newDoc.save({ useObjectStreams: true })
+      progressPercent.value = 100
+      return output
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      errorMessage.value = `Organize failed: ${msg}`
       throw err
     } finally {
       isProcessing.value = false
@@ -618,7 +675,273 @@ export function usePdfEngine() {
     }
   }
 
-  // 10. PDF to Excel Converter (.xlsx / .csv via Spatial Coordinate Clustering)
+  // --- Advanced 2D Document Layout & Table Geometry Engine ---
+  interface LayoutToken {
+    str: string
+    x: number
+    y: number
+    width: number
+    height: number
+    fontSize: number
+  }
+
+  interface VisualLine {
+    y: number
+    fontSize: number
+    tokens: { str: string; x: number; width: number; fontSize: number }[]
+    fullText: string
+  }
+
+  interface LayoutBlock {
+    type: 'heading' | 'paragraph' | 'table'
+    level?: 1 | 2
+    text?: string
+    rows?: (string | number)[][]
+    columnWidthRatios?: number[]
+  }
+
+  function buildVisualLine(rawTokens: LayoutToken[]): VisualLine {
+    rawTokens.sort((a, b) => a.x - b.x)
+
+    const merged: { str: string; x: number; width: number; fontSize: number }[] = []
+    let current: { str: string; x: number; width: number; fontSize: number } | null = null
+
+    for (const tok of rawTokens) {
+      if (!current) {
+        current = { str: tok.str, x: tok.x, width: tok.width, fontSize: tok.fontSize || 10 }
+      } else {
+        const gap = tok.x - (current.x + current.width)
+        const mergeThreshold = Math.max(current.fontSize, tok.fontSize || 10) * 0.65
+        if (gap <= mergeThreshold) {
+          current.str += (gap > 0.5 ? ' ' : '') + tok.str
+          current.width = (tok.x + tok.width) - current.x
+        } else {
+          merged.push(current)
+          current = { str: tok.str, x: tok.x, width: tok.width, fontSize: tok.fontSize || 10 }
+        }
+      }
+    }
+    if (current) merged.push(current)
+
+    const fullText = merged.map(m => m.str).join(' ')
+    const maxFontSize = Math.max(...merged.map(m => m.fontSize), 10)
+    const avgY = rawTokens.reduce((sum, t) => sum + t.y, 0) / rawTokens.length
+
+    return {
+      y: avgY,
+      fontSize: maxFontSize,
+      tokens: merged,
+      fullText
+    }
+  }
+
+  function inferTableGrid(lines: VisualLine[]): { rows: (string | number)[][]; columnWidthRatios: number[] } {
+    const starts: number[] = []
+    for (const line of lines) {
+      for (const tok of line.tokens) {
+        starts.push(tok.x)
+      }
+    }
+    starts.sort((a, b) => a - b)
+
+    // Cluster starts into canonical column centers (adaptive proximity 24pt)
+    const clusters: { center: number; count: number; items: number[] }[] = []
+    for (const x of starts) {
+      const match = clusters.find(c => Math.abs(c.center - x) < 24)
+      if (match) {
+        match.items.push(x)
+        match.center = match.items.reduce((sum, val) => sum + val, 0) / match.items.length
+        match.count++
+      } else {
+        clusters.push({ center: x, count: 1, items: [x] })
+      }
+    }
+    clusters.sort((a, b) => a.center - b.center)
+
+    // Column dividing boundaries at midpoints between cluster centers
+    const boundaries: number[] = []
+    for (let i = 0; i < clusters.length - 1; i++) {
+      boundaries.push((clusters[i]!.center + clusters[i + 1]!.center) / 2)
+    }
+
+    function getColIndex(x: number): number {
+      for (let b = 0; b < boundaries.length; b++) {
+        if (x < boundaries[b]!) return b
+      }
+      return boundaries.length
+    }
+
+    const numCols = clusters.length
+    const columnWidthRatios: number[] = []
+    let prevBound = (clusters[0]?.center || 50) - 10
+    for (let i = 0; i < numCols; i++) {
+      const nextBound = i < boundaries.length ? boundaries[i]! : (clusters[numCols - 1]?.center || 500) + 60
+      const w = Math.max(30, nextBound - prevBound)
+      columnWidthRatios.push(w)
+      prevBound = nextBound
+    }
+    const totalW = columnWidthRatios.reduce((s, v) => s + v, 0)
+    const normPercentages = columnWidthRatios.map(w => Math.max(8, Math.round((w / (totalW || 1)) * 100)))
+
+    // Stitch wrapped sub-lines into their parent row
+    const normalizedLines: VisualLine[] = []
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!
+      const prevLine = lines[i - 1]
+      const isWrap = prevLine &&
+        Math.abs(prevLine.y - line.y) < line.fontSize * 1.35 &&
+        line.tokens.length <= 2 &&
+        prevLine.tokens.length > line.tokens.length
+
+      if (isWrap && normalizedLines.length > 0) {
+        const lastLine = normalizedLines[normalizedLines.length - 1]!
+        lastLine.tokens.push(...line.tokens)
+        lastLine.fullText += ' ' + line.fullText
+      } else {
+        normalizedLines.push({ ...line, tokens: [...line.tokens] })
+      }
+    }
+
+    const rows: (string | number)[][] = []
+    for (const line of normalizedLines) {
+      const rowCells = new Array(numCols).fill('')
+      for (const tok of line.tokens) {
+        const colIdx = getColIndex(tok.x)
+        if (rowCells[colIdx]) {
+          rowCells[colIdx] += ' ' + tok.str
+        } else {
+          rowCells[colIdx] = tok.str
+        }
+      }
+
+      // Convert financial & numeric strings to true numbers
+      const parsedRow = rowCells.map(raw => {
+        const str = String(raw).trim()
+        const cleanNum = str
+          .replace(/^(INR|Rs\.?|[₹$€£])\s*/i, '')
+          .replace(/^\((.+)\)$/, '-$1')
+          .replace(/,/g, '')
+
+        if (/^[-+]?\d+(\.\d+)?$/.test(cleanNum) && !isNaN(Number(cleanNum))) {
+          return Number(cleanNum)
+        }
+        return str
+      })
+
+      rows.push(parsedRow)
+    }
+
+    return {
+      rows,
+      columnWidthRatios: normPercentages
+    }
+  }
+
+  function parseLayoutPage(rawItems: any[]): LayoutBlock[] {
+    const items = (rawItems || []).filter((it: any) => it.str && it.str.trim())
+    if (items.length === 0) return []
+
+    const fontSizes = items.map((it: any) => it.fontSize || 10).sort((a: number, b: number) => a - b)
+    const medianFontSize = fontSizes[Math.floor(fontSizes.length / 2)] || 10
+
+    // 1. Sort top-to-bottom (Y descending in PDF space), then left-to-right (X ascending)
+    items.sort((a: any, b: any) => b.y - a.y || a.x - b.x)
+
+    // 2. Cluster into lines with adaptive Y tolerance
+    const lines: VisualLine[] = []
+    let curLineTokens: LayoutToken[] = []
+    let curY: number | null = null
+
+    for (const item of items) {
+      const threshold = Math.max(3.5, (item.fontSize || 10) * 0.45)
+      if (curY === null || Math.abs(item.y - curY) > threshold) {
+        if (curLineTokens.length > 0) {
+          lines.push(buildVisualLine(curLineTokens))
+        }
+        curLineTokens = [item]
+        curY = item.y
+      } else {
+        curLineTokens.push(item)
+      }
+    }
+    if (curLineTokens.length > 0) {
+      lines.push(buildVisualLine(curLineTokens))
+    }
+
+    // 3. Segment into semantic blocks (Headings, Paragraphs, Tables)
+    const blocks: LayoutBlock[] = []
+    let tableBuffer: VisualLine[] = []
+
+    function flushTableBuffer() {
+      if (tableBuffer.length === 0) return
+
+      if (tableBuffer.length === 1 && tableBuffer[0]!.tokens.length === 1) {
+        blocks.push({
+          type: 'paragraph',
+          text: tableBuffer[0]!.fullText
+        })
+        tableBuffer = []
+        return
+      }
+
+      const { rows, columnWidthRatios } = inferTableGrid(tableBuffer)
+      blocks.push({
+        type: 'table',
+        rows,
+        columnWidthRatios
+      })
+      tableBuffer = []
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!
+      const isHeading1 = line.fontSize >= medianFontSize * 1.35
+      const isHeading2 = line.fontSize >= medianFontSize * 1.18 && line.fontSize < medianFontSize * 1.35
+
+      if (isHeading1 || isHeading2) {
+        flushTableBuffer()
+        blocks.push({
+          type: 'heading',
+          level: isHeading1 ? 1 : 2,
+          text: line.fullText
+        })
+        continue
+      }
+
+      // Candidate table line has 2 or more distinct horizontal columns
+      if (line.tokens.length >= 2) {
+        tableBuffer.push(line)
+        continue
+      }
+
+      // Single-token line while table is active: check if next line continues the table
+      if (tableBuffer.length >= 2) {
+        const nextLine = lines[i + 1]
+        if (nextLine && nextLine.tokens.length >= 2) {
+          tableBuffer.push(line)
+          continue
+        }
+      }
+
+      // Flush table buffer and treat as flowing paragraph
+      flushTableBuffer()
+
+      const prevBlock = blocks[blocks.length - 1]
+      if (prevBlock && prevBlock.type === 'paragraph' && prevBlock.text) {
+        prevBlock.text += ' ' + line.fullText
+      } else {
+        blocks.push({
+          type: 'paragraph',
+          text: line.fullText
+        })
+      }
+    }
+
+    flushTableBuffer()
+    return blocks
+  }
+
+  // 10. PDF to Excel Converter (.xlsx / .csv via Coordinate Histogram Binning & Tabular Geometry)
   async function pdfToExcel(file: File, options?: PdfToExcelOptions): Promise<PdfToExcelResult> {
     isProcessing.value = true
     errorMessage.value = null
@@ -627,6 +950,7 @@ export function usePdfEngine() {
 
     const baseName = file.name.replace(/\.[^/.]+$/, '')
     const format = options?.format || 'xlsx'
+    const sheetMode = options?.sheetMode || 'multi_sheet'
 
     try {
       const buffer = new Uint8Array(await file.arrayBuffer())
@@ -639,94 +963,102 @@ export function usePdfEngine() {
 
       let totalRowsExtracted = 0
       let maxColsExtracted = 0
+      let totalTablesCount = 0
+      const previewRows: (string | number)[][] = []
       const allRowsCombined: (string | number)[][] = []
 
+      let consolidatedSheet: ExcelJS.Worksheet | null = null
+
       for (let p = 0; p < totalPages; p++) {
-        statusMessage.value = `Clustering table geometry on page ${p + 1} of ${totalPages}...`
-        const items = (textExtract.items[p] || []).filter(it => it.str && it.str.trim())
+        statusMessage.value = `Analyzing layout & table geometry on page ${p + 1} of ${totalPages}...`
+        const rawItems = (textExtract.items[p] || []).filter(it => it.str && it.str.trim())
+        const blocks = parseLayoutPage(rawItems)
 
-        // 1. Sort top-to-bottom (Y descending in PDF coordinate space)
-        items.sort((a, b) => b.y - a.y || a.x - b.x)
+        const sheet = sheetMode === 'single_sheet'
+          ? (consolidatedSheet || (consolidatedSheet = workbook.addWorksheet('Consolidated Data')))
+          : workbook.addWorksheet(totalPages === 1 ? 'Extracted Data' : `Page ${p + 1}`)
 
-        // 2. Cluster into physical rows using adaptive Y-tolerance
-        const rawRows: typeof items[] = []
-        let currentRow: typeof items = []
-        let currentY: number | null = null
+        if (p > 0 && sheetMode === 'single_sheet') {
+          sheet.addRow([])
+          const pageHeader = sheet.addRow([`--- Page ${p + 1} ---`])
+          pageHeader.font = { bold: true, italic: true, color: { argb: 'FF64748B' } }
+          sheet.addRow([])
+        }
 
-        for (const item of items) {
-          const rowThreshold = (item.height || item.fontSize || 10) * 0.5
-          if (currentY === null || Math.abs(item.y - currentY) > rowThreshold) {
-            if (currentRow.length > 0) rawRows.push(currentRow)
-            currentRow = [item]
-            currentY = item.y
-          } else {
-            currentRow.push(item)
+        for (const block of blocks) {
+          if (block.type === 'heading' && !options?.tableOnly) {
+            const r = sheet.addRow([block.text])
+            r.font = { bold: true, size: block.level === 1 ? 14 : 12, color: { argb: 'FF1E293B' } }
+            allRowsCombined.push([block.text || ''])
+            sheet.addRow([])
+          } else if (block.type === 'paragraph' && !options?.tableOnly) {
+            const r = sheet.addRow([block.text])
+            r.font = { italic: true, size: 9.5, color: { argb: 'FF475569' } }
+            allRowsCombined.push([block.text || ''])
+          } else if (block.type === 'table' && block.rows && block.rows.length > 0) {
+            totalTablesCount++
+            const colLen = block.rows[0]?.length || 0
+            if (colLen > maxColsExtracted) maxColsExtracted = colLen
+            totalRowsExtracted += block.rows.length
+
+            sheet.addRow([]) // spacer before table
+            block.rows.forEach((row, rIdx) => {
+              const isHeader = rIdx === 0
+              const addedRow = sheet.addRow(row)
+              allRowsCombined.push(row)
+
+              if (previewRows.length < 8) {
+                previewRows.push(row)
+              }
+
+              if (isHeader) {
+                addedRow.height = 24
+                addedRow.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+                addedRow.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FF1E293B' }
+                }
+              } else {
+                addedRow.height = 20
+                addedRow.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: rIdx % 2 === 0 ? 'FFF8FAFC' : 'FFFFFFFF' }
+                }
+              }
+
+              addedRow.eachCell({ includeEmpty: true }, (cell) => {
+                cell.border = {
+                  top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                  bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                  left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                  right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+                }
+                if (typeof cell.value === 'number') {
+                  cell.alignment = { horizontal: 'right', vertical: 'middle' }
+                  cell.numFmt = Number.isInteger(cell.value) ? '#,##0' : '#,##0.00'
+                } else {
+                  cell.alignment = { horizontal: isHeader ? 'center' : 'left', vertical: 'middle' }
+                }
+              })
+            })
+            sheet.addRow([]) // spacer after table
           }
         }
-        if (currentRow.length > 0) rawRows.push(currentRow)
 
-        // 3. For each row, merge horizontally adjacent tokens into cohesive cells
-        const gridData: (string | number)[][] = rawRows.map(row => {
-          row.sort((a, b) => a.x - b.x)
-          const cells: { str: string; x: number; width: number }[] = []
-          let curCell: { str: string; x: number; width: number } | null = null
-
-          for (const tok of row) {
-            if (!curCell) {
-              curCell = { str: tok.str, x: tok.x, width: tok.width }
-            } else {
-              const gap = tok.x - (curCell.x + curCell.width)
-              if (gap < (tok.fontSize || 10) * 0.8) {
-                curCell.str += ' ' + tok.str
-                curCell.width = (tok.x + tok.width) - curCell.x
-              } else {
-                cells.push(curCell)
-                curCell = { str: tok.str, x: tok.x, width: tok.width }
-              }
+        // Auto-fit column widths
+        const colCount = sheet.actualColumnCount || sheet.columnCount || 10
+        for (let c = 1; c <= colCount; c++) {
+          const col = sheet.getColumn(c)
+          let maxLen = 12
+          col.eachCell({ includeEmpty: false }, cell => {
+            const val = cell.value ? String(cell.value) : ''
+            if (val.length > maxLen) {
+              maxLen = Math.min(val.length, 55)
             }
-          }
-          if (curCell) cells.push(curCell)
-
-          return cells.map(c => {
-            const raw = c.str.trim()
-            // Auto-parse numeric/financial strings so formulas work in Excel
-            const cleanNumeric = raw.replace(/^[₹$€£]\s*/, '').replace(/,/g, '')
-            if (/^[-+]?\d+(\.\d+)?$/.test(cleanNumeric) && !isNaN(Number(cleanNumeric))) {
-              return Number(cleanNumeric)
-            }
-            return raw
           })
-        })
-
-        if (gridData.length > 0) {
-          totalRowsExtracted += gridData.length
-          const pageCols = Math.max(...gridData.map(r => r.length), 0)
-          if (pageCols > maxColsExtracted) maxColsExtracted = pageCols
-
-          const sheet = workbook.addWorksheet(totalPages === 1 ? 'Extracted Data' : `Page ${p + 1}`)
-          gridData.forEach(row => sheet.addRow(row))
-          allRowsCombined.push(...gridData)
-
-          // Style header row (Row 1)
-          if (sheet.rowCount > 0) {
-            const headerRow = sheet.getRow(1)
-            headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-            headerRow.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FF1E293B' }
-            }
-          }
-
-          // Auto-fit column widths
-          sheet.columns.forEach(col => {
-            let maxLen = 10
-            col.eachCell?.({ includeEmpty: true }, cell => {
-              const val = cell.value ? String(cell.value) : ''
-              if (val.length > maxLen) maxLen = Math.min(val.length, 50)
-            })
-            col.width = maxLen + 3
-          })
+          col.width = maxLen + 4
         }
 
         progressPercent.value = Math.round(15 + ((p + 1) / totalPages) * 75)
@@ -748,7 +1080,9 @@ export function usePdfEngine() {
           data: csvContent,
           filename: `${baseName}.csv`,
           rowCount: totalRowsExtracted,
-          colCount: maxColsExtracted
+          colCount: maxColsExtracted,
+          tableCount: totalTablesCount,
+          previewRows
         }
       }
 
@@ -760,7 +1094,9 @@ export function usePdfEngine() {
         data: new Uint8Array(excelBuffer),
         filename: `${baseName}.xlsx`,
         rowCount: totalRowsExtracted,
-        colCount: maxColsExtracted
+        colCount: maxColsExtracted,
+        tableCount: totalTablesCount,
+        previewRows
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -771,8 +1107,8 @@ export function usePdfEngine() {
     }
   }
 
-  // 11. PDF to Word Converter (.docx via Paragraph Reflow & Native Tables)
-  async function pdfToWord(file: File): Promise<PdfToWordResult> {
+  // 11. PDF to Word Converter (.docx via Flowing Paragraph Reflow & Unified Native Tables)
+  async function pdfToWord(file: File, options?: PdfToWordOptions): Promise<PdfToWordResult> {
     isProcessing.value = true
     errorMessage.value = null
     progressPercent.value = 10
@@ -787,71 +1123,81 @@ export function usePdfEngine() {
 
       const docElements: (Paragraph | Table)[] = []
       let totalParagraphs = 0
+      let totalTables = 0
+      let totalHeadings = 0
 
       for (let p = 0; p < totalPages; p++) {
-        statusMessage.value = `Reflowing page ${p + 1} of ${totalPages}...`
-        const items = (textExtract.items[p] || []).filter(it => it.str && it.str.trim())
-        if (items.length === 0) continue
+        statusMessage.value = `Reconstructing page ${p + 1} of ${totalPages}...`
+        const rawItems = (textExtract.items[p] || []).filter(it => it.str && it.str.trim())
+        if (rawItems.length === 0) continue
 
-        // Determine baseline body font size (median)
-        const fontSizes = items.map(it => it.fontSize || 10).sort((a, b) => a - b)
-        const medianFontSize = fontSizes[Math.floor(fontSizes.length / 2)] || 10
-
-        items.sort((a, b) => b.y - a.y || a.x - b.x)
-
-        // Group into lines
-        const rawRows: typeof items[] = []
-        let currentRow: typeof items = []
-        let currentY: number | null = null
-
-        for (const item of items) {
-          const rowThreshold = (item.height || item.fontSize || 10) * 0.5
-          if (currentY === null || Math.abs(item.y - currentY) > rowThreshold) {
-            if (currentRow.length > 0) rawRows.push(currentRow)
-            currentRow = [item]
-            currentY = item.y
-          } else {
-            currentRow.push(item)
-          }
+        if (p > 0 && options?.preservePageBreaks !== false) {
+          docElements.push(new Paragraph({
+            children: [new PageBreak()]
+          }))
         }
-        if (currentRow.length > 0) rawRows.push(currentRow)
 
-        for (const row of rawRows) {
-          row.sort((a, b) => a.x - b.x)
-          const firstTok = row[0]
-          const isLargeHeader = firstTok && (firstTok.fontSize || 10) >= medianFontSize * 1.4
-          const isSubHeader = firstTok && (firstTok.fontSize || 10) >= medianFontSize * 1.2
+        const blocks = parseLayoutPage(rawItems)
 
-          // If multiple separate columns with large gaps, render as native Word Table
-          if (row.length > 1 && !isLargeHeader) {
-            const tableRow = new TableRow({
-              children: row.map(cell => new TableCell({
-                children: [new Paragraph({ children: [new TextRun(cell.str)] })]
-              }))
+        for (const block of blocks) {
+          if (block.type === 'heading') {
+            totalHeadings++
+            docElements.push(new Paragraph({
+              text: block.text || '',
+              heading: block.level === 1 ? HeadingLevel.HEADING_1 : HeadingLevel.HEADING_2,
+              spacing: { before: 240, after: 120 }
+            }))
+          } else if (block.type === 'paragraph') {
+            totalParagraphs++
+            docElements.push(new Paragraph({
+              children: [new TextRun({ text: block.text || '', size: 22 })], // 11pt
+              spacing: { before: 80, after: 140, line: 276 }
+            }))
+          } else if (block.type === 'table' && block.rows && block.rows.length > 0) {
+            totalTables++
+            const numCols = block.rows[0]?.length || 1
+            const widths = block.columnWidthRatios || new Array(numCols).fill(Math.round(100 / numCols))
+
+            const tableRows = block.rows.map((row, rIdx) => {
+              const isHeader = rIdx === 0
+              return new TableRow({
+                tableHeader: isHeader,
+                children: row.map((cellVal, cIdx) => new TableCell({
+                  width: { size: widths[cIdx] || Math.round(100 / numCols), type: WidthType.PERCENTAGE },
+                  shading: isHeader
+                    ? { fill: '1E293B' }
+                    : (rIdx % 2 === 1 ? { fill: 'F8FAFC' } : undefined),
+                  margins: { top: 120, bottom: 120, left: 140, right: 140 },
+                  children: [
+                    new Paragraph({
+                      alignment: typeof cellVal === 'number' ? AlignmentType.RIGHT : AlignmentType.LEFT,
+                      children: [
+                        new TextRun({
+                          text: String(cellVal ?? ''),
+                          bold: isHeader,
+                          color: isHeader ? 'FFFFFF' : '1E293B',
+                          size: 20 // 10pt
+                        })
+                      ]
+                    })
+                  ]
+                }))
+              })
             })
-            docElements.push(new Table({ rows: [tableRow] }))
-            totalParagraphs++
-          } else {
-            const lineText = row.map(c => c.str).join(' ')
-            if (isLargeHeader) {
-              docElements.push(new Paragraph({
-                text: lineText,
-                heading: HeadingLevel.HEADING_1,
-                spacing: { before: 240, after: 120 }
-              }))
-            } else if (isSubHeader) {
-              docElements.push(new Paragraph({
-                text: lineText,
-                heading: HeadingLevel.HEADING_2,
-                spacing: { before: 180, after: 80 }
-              }))
-            } else {
-              docElements.push(new Paragraph({
-                children: [new TextRun(lineText)],
-                spacing: { after: 80 }
-              }))
-            }
-            totalParagraphs++
+
+            // Unified, single native Table with cohesive styling
+            docElements.push(new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              rows: tableRows,
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+                bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+                left: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+                right: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+                insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: 'E2E8F0' },
+                insideVertical: { style: BorderStyle.SINGLE, size: 2, color: 'E2E8F0' }
+              }
+            }))
           }
         }
 
@@ -866,7 +1212,7 @@ export function usePdfEngine() {
           properties: {},
           children: docElements.length > 0
             ? docElements
-            : [new Paragraph({ text: 'Empty document content.' })]
+            : [new Paragraph({ text: 'No text extracted from document.' })]
         }]
       })
 
@@ -877,7 +1223,9 @@ export function usePdfEngine() {
       return {
         blob,
         filename: `${baseName}.docx`,
-        paragraphsCount: totalParagraphs
+        paragraphsCount: totalParagraphs,
+        tablesCount: totalTables,
+        headingsCount: totalHeadings
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -1057,6 +1405,7 @@ export function usePdfEngine() {
     splitPdf,
     rotatePdf,
     removePages,
+    organizePdf,
     watermarkPdf,
     addPageNumbers,
     imagesToPdf,

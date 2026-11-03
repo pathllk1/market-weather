@@ -28,11 +28,20 @@ const tools: PdfTool[] = [
   {
     id: 'merge',
     title: 'Merge PDF',
-    description: 'Combine multiple PDF files into a single unified document in your preferred order.',
+    description: 'Combine multiple PDF files into a single unified document with drag-and-drop reordering.',
     icon: 'i-lucide-combine',
     category: 'organize',
     badge: 'Popular',
     to: '/pdf/merge'
+  },
+  {
+    id: 'organize',
+    title: 'Organize PDF',
+    description: 'Sort and reorder pages visually with drag and drop. Rotate or exclude unwanted pages.',
+    icon: 'i-lucide-arrow-down-up',
+    category: 'organize',
+    badge: 'Drag & Drop',
+    to: '/pdf/organize'
   },
   {
     id: 'split',
@@ -123,7 +132,7 @@ const tools: PdfTool[] = [
 ]
 
 const filteredTools = computed(() => {
-  return tools.filter(t => {
+  return tools.filter((t) => {
     const matchesCategory = activeCategory.value === 'all' || t.category === activeCategory.value
     const query = searchQuery.value.toLowerCase().trim()
     const matchesSearch = !query || t.title.toLowerCase().includes(query) || t.description.toLowerCase().includes(query)
@@ -133,50 +142,46 @@ const filteredTools = computed(() => {
 </script>
 
 <template>
-  <div class="w-full px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-    <!-- Header Hero Banner -->
-    <div class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-8 sm:p-12 text-white shadow-xl relative overflow-hidden border border-slate-800">
-      <div class="relative z-10 max-w-2xl space-y-3">
-        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold bg-white/10 text-emerald-400 border border-white/10 backdrop-blur-sm">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          100% In-Browser Engine • Zero Third-Party Uploads
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-5 space-y-5">
+    <!-- Header Hero Banner (Compact & Space-Efficient) -->
+    <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl px-5 sm:px-7 py-4 sm:py-5 text-white shadow-md relative overflow-hidden border border-slate-800">
+      <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div class="space-y-1 max-w-2xl">
+          <div class="flex flex-wrap items-center gap-2.5">
+            <h1 class="text-xl sm:text-2xl font-black tracking-tight text-white">
+              Enterprise PDF Studio
+            </h1>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white/10 text-emerald-400 border border-white/10">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              100% In-Browser • Zero Cloud Uploads
+            </span>
+          </div>
+          <p class="text-xs sm:text-sm text-slate-300 leading-snug">
+            High-performance PDF tools running strictly inside browser memory. Merge, split, compress, and convert securely.
+          </p>
         </div>
 
-        <h1 class="text-3xl sm:text-4xl font-black tracking-tight text-white">
-          Enterprise PDF Studio
-        </h1>
-        <p class="text-sm sm:text-base text-slate-300 leading-relaxed">
-          High-performance PDF tools that run completely within your workstation memory. Merge, split, rotate, watermark, and convert without risking sensitive financial or tax documents to cloud services.
-        </p>
-
-        <!-- Stats Bar -->
-        <div class="pt-4 flex flex-wrap items-center gap-6 text-xs text-slate-400 font-mono">
-          <div class="flex items-center gap-2">
-            <UIcon
-              name="i-lucide-cpu"
-              class="w-4 h-4 text-primary"
-            />
-            <span>Pure JS & Wasm Engine</span>
-          </div>
-          <div class="flex items-center gap-2">
+        <!-- Inline Badges / Metrics -->
+        <div class="flex flex-wrap items-center gap-2.5 text-[11px] text-slate-300 font-mono shrink-0">
+          <div class="flex items-center gap-1.5 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg">
             <UIcon
               name="i-lucide-shield-check"
-              class="w-4 h-4 text-emerald-400"
+              class="w-3.5 h-3.5 text-emerald-400"
             />
-            <span>DPDP / Banking Grade Privacy</span>
+            <span>DPDP Banking Privacy</span>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1.5 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg">
             <UIcon
               name="i-lucide-zap"
-              class="w-4 h-4 text-amber-400"
+              class="w-3.5 h-3.5 text-amber-400"
             />
             <span>Instant Execution</span>
           </div>
         </div>
       </div>
 
-      <!-- Background Ambient Glow -->
-      <div class="absolute -right-20 -bottom-20 w-96 h-96 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
+      <!-- Subtle Ambient Glow -->
+      <div class="absolute -right-10 -bottom-10 w-48 h-48 bg-primary/20 rounded-full blur-2xl pointer-events-none" />
     </div>
 
     <!-- Filters & Search Toolbar -->
@@ -291,4 +296,3 @@ const filteredTools = computed(() => {
     </div>
   </div>
 </template>
-

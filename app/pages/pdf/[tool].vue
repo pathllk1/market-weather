@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import {
   usePdfEngine,
   type PageThumbnail,
@@ -16,22 +16,22 @@ import PdfActionDock from '../../components/pdf/PdfActionDock.vue'
 const route = useRoute()
 const toolId = computed(() => String(route.params.tool || 'merge').toLowerCase())
 
-const toolMetadata: Record<string, { title: string; desc: string; icon: string; action: string; multiple: boolean; accept?: string }> = {
-  merge: {
+const toolMetadata: Record<string, { title: string, desc: string, icon: string, action: string, multiple: boolean, accept?: string }> = {
+  'merge': {
     title: 'Merge PDF Documents',
     desc: 'Select or drag multiple PDF files to combine them into a single clean document.',
     icon: 'i-lucide-combine',
     action: 'Merge & Download',
     multiple: true
   },
-  split: {
+  'split': {
     title: 'Split PDF by Page Range',
     desc: 'Extract specific pages or chapters into a brand-new PDF document.',
     icon: 'i-lucide-scissors',
     action: 'Extract & Download',
     multiple: false
   },
-  compress: {
+  'compress': {
     title: 'Compress PDF Document',
     desc: 'Reduce file size by 30% to 85% with smart vector stream indexing or portal-ready quantization.',
     icon: 'i-lucide-minimize-2',
@@ -67,7 +67,7 @@ const toolMetadata: Record<string, { title: string; desc: string; icon: string; 
     multiple: true,
     accept: 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg'
   },
-  rotate: {
+  'rotate': {
     title: 'Rotate PDF Pages',
     desc: 'Rotate specific pages or all pages clockwise with real-time visual feedback.',
     icon: 'i-lucide-rotate-cw',
@@ -81,7 +81,14 @@ const toolMetadata: Record<string, { title: string; desc: string; icon: string; 
     action: 'Remove & Download',
     multiple: false
   },
-  watermark: {
+  'organize': {
+    title: 'Organize PDF Pages',
+    desc: 'Drag and drop page thumbnails to sort and reorder. Rotate or exclude pages visually with live previews.',
+    icon: 'i-lucide-arrow-down-up',
+    action: 'Save & Download',
+    multiple: false
+  },
+  'watermark': {
     title: 'Watermark PDF',
     desc: 'Stamp custom enterprise security text (e.g. Confidential, Draft, Internal) with custom opacity.',
     icon: 'i-lucide-stamp',
@@ -112,8 +119,7 @@ const {
   errorMessage,
   mergePdfs,
   splitPdf,
-  rotatePdf,
-  removePages,
+  organizePdf,
   watermarkPdf,
   addPageNumbers,
   imagesToPdf,
@@ -155,9 +161,12 @@ const imageOutputs = ref<PageImageOutput[]>([])
 
 // 3. PDF to Excel Options & Result
 const excelFormat = ref<'xlsx' | 'csv'>('xlsx')
+const excelSheetMode = ref<'multi_sheet' | 'single_sheet'>('multi_sheet')
+const excelTableOnly = ref<boolean>(false)
 const excelStats = ref<PdfToExcelResult | null>(null)
 
 // 4. PDF to Word Options & Result
+const wordPreservePageBreaks = ref<boolean>(true)
 const wordStats = ref<PdfToWordResult | null>(null)
 
 async function handleFilesSelected(files: File[]) {
@@ -186,11 +195,11 @@ async function handleFilesSelected(files: File[]) {
           found.isLoadingThumbnail = false
         }
       } else {
-        inspectPdf(card.file).then(inspect => {
+        inspectPdf(card.file).then((inspect) => {
           const found = documentCards.value.find(c => c.id === cardId)
           if (found) found.numPages = inspect.numPages
         })
-        renderPageThumbnail(card.file, 1, 0.4).then(thumb => {
+        renderPageThumbnail(card.file, 1, 0.4).then((thumb) => {
           const found = documentCards.value.find(c => c.id === cardId)
           if (found) {
             if (thumb) {
@@ -198,7 +207,7 @@ async function handleFilesSelected(files: File[]) {
             }
             found.isLoadingThumbnail = false
           }
-        }).catch(err => {
+        }).catch((err) => {
           console.warn('Card preview failed:', err)
           const found = documentCards.value.find(c => c.id === cardId)
           if (found) {
@@ -218,7 +227,7 @@ async function handleFilesSelected(files: File[]) {
     wordStats.value = null
 
     // If tool uses page grid, inspect & render page previews
-    if (['split', 'rotate', 'remove-pages', 'watermark', 'page-numbers'].includes(toolId.value)) {
+    if (['split', 'rotate', 'remove-pages', 'watermark', 'page-numbers', 'organize'].includes(toolId.value)) {
       isLoadingThumbnails.value = true
       const inspect = await inspectPdf(targetFile)
       totalDocumentPages.value = inspect.numPages
@@ -233,7 +242,7 @@ async function handleFilesSelected(files: File[]) {
       pageRotations.value.clear()
 
       // Asynchronously render high-fidelity canvas page previews
-      renderAllPageThumbnails(targetFile, 60, 0.35).then(renderedPages => {
+      renderAllPageThumbnails(targetFile, 60, 0.35).then((renderedPages) => {
         if (renderedPages.length > 0) {
           pages.value = renderedPages
         }
@@ -242,7 +251,7 @@ async function handleFilesSelected(files: File[]) {
       })
     } else {
       // General inspection
-      inspectPdf(targetFile).then(inspect => {
+      inspectPdf(targetFile).then((inspect) => {
         totalDocumentPages.value = inspect.numPages
       })
     }
@@ -254,6 +263,12 @@ function handleMoveCard(fromIndex: number, toIndex: number) {
   const item = documentCards.value.splice(fromIndex, 1)[0]!
   documentCards.value.splice(toIndex, 0, item)
   selectedFiles.value = documentCards.value.map(d => d.file)
+}
+
+function handleMovePage(fromIndex: number, toIndex: number) {
+  if (fromIndex < 0 || fromIndex >= pages.value.length || toIndex < 0 || toIndex >= pages.value.length) return
+  const item = pages.value.splice(fromIndex, 1)[0]!
+  pages.value.splice(toIndex, 0, item)
 }
 
 function handleRotateCard(index: number) {
@@ -287,7 +302,7 @@ function handleToggleDeletePage(pageNumber: number) {
 }
 
 function handleResetEdits() {
-  pages.value.forEach(p => {
+  pages.value.forEach((p) => {
     p.rotation = 0
     p.isDeleted = false
   })
@@ -352,24 +367,25 @@ async function executeCurrentAction() {
         downloadBlob(res.images[0].blob, res.images[0].filename, mime)
       }
     } else if (toolId.value === 'pdf-to-excel') {
-      const res = await pdfToExcel(firstFile, { format: excelFormat.value })
+      const res = await pdfToExcel(firstFile, {
+        format: excelFormat.value,
+        sheetMode: excelSheetMode.value,
+        tableOnly: excelTableOnly.value
+      })
       excelStats.value = res
       const mime = excelFormat.value === 'csv'
         ? 'text/csv'
         : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       downloadBlob(res.data, res.filename, mime)
     } else if (toolId.value === 'pdf-to-word') {
-      const res = await pdfToWord(firstFile)
+      const res = await pdfToWord(firstFile, {
+        preservePageBreaks: wordPreservePageBreaks.value
+      })
       wordStats.value = res
       downloadBlob(res.blob, res.filename, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-    } else if (toolId.value === 'rotate') {
-      outputBytes = await rotatePdf(firstFile, pageRotations.value)
-      outputFilename = `${baseName}_rotated.pdf`
-      if (outputBytes) downloadBlob(outputBytes, outputFilename)
-    } else if (toolId.value === 'remove-pages') {
-      const toDelete = pages.value.filter(p => p.isDeleted).map(p => p.pageNumber - 1)
-      outputBytes = await removePages(firstFile, toDelete)
-      outputFilename = `${baseName}_trimmed.pdf`
+    } else if (['organize', 'rotate', 'remove-pages'].includes(toolId.value)) {
+      outputBytes = await organizePdf(firstFile, pages.value)
+      outputFilename = `${baseName}_${toolId.value === 'organize' ? 'organized' : (toolId.value === 'rotate' ? 'rotated' : 'trimmed')}.pdf`
       if (outputBytes) downloadBlob(outputBytes, outputFilename)
     } else if (toolId.value === 'watermark') {
       outputBytes = await watermarkPdf(firstFile, {
@@ -400,9 +416,10 @@ async function executeCurrentAction() {
 }
 
 function copyImageToClipboard(img: PageImageOutput) {
-  if (typeof navigator !== 'undefined' && navigator.clipboard && (window as any).ClipboardItem) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard && 'ClipboardItem' in window) {
     try {
-      const item = new (window as any).ClipboardItem({ [img.blob.type]: img.blob })
+      const ClipboardItemConstructor = (window as unknown as { ClipboardItem: new (data: Record<string, Blob>) => ClipboardItem }).ClipboardItem
+      const item = new ClipboardItemConstructor({ [img.blob.type]: img.blob })
       navigator.clipboard.write([item])
       alert(`Page ${img.pageNumber} copied to clipboard!`)
     } catch {
@@ -737,66 +754,181 @@ function copyImageToClipboard(img: PageImageOutput) {
       <!-- 3. PDF to Excel Options -->
       <div
         v-if="toolId === 'pdf-to-excel'"
-        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4"
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-5"
       >
         <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <UIcon
             name="i-lucide-sliders"
             class="w-4 h-4 text-primary"
           />
-          Spreadsheet Extraction Format
+          Spreadsheet Extraction & Layout Settings
         </h3>
 
-        <div class="max-w-md space-y-3">
-          <div class="grid grid-cols-2 gap-3">
-            <label
-              class="border-2 rounded-xl p-3 cursor-pointer flex items-center justify-between"
-              :class="excelFormat === 'xlsx' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800'"
-            >
-              <div>
-                <div class="text-xs font-bold text-slate-900 dark:text-slate-100">Excel (.xlsx)</div>
-                <div class="text-[10px] text-slate-400">Styled header & formulas</div>
-              </div>
-              <input
-                v-model="excelFormat"
-                type="radio"
-                value="xlsx"
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+          <!-- Format Selector -->
+          <div class="space-y-2">
+            <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">File Format</span>
+            <div class="grid grid-cols-2 gap-2.5">
+              <label
+                class="border-2 rounded-xl p-3 cursor-pointer flex items-center justify-between transition-all"
+                :class="excelFormat === 'xlsx' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'"
               >
-            </label>
+                <div>
+                  <div class="text-xs font-bold text-slate-900 dark:text-slate-100">Excel (.xlsx)</div>
+                  <div class="text-[10px] text-slate-400">Styled header & formulas</div>
+                </div>
+                <input
+                  v-model="excelFormat"
+                  type="radio"
+                  value="xlsx"
+                  class="text-primary"
+                >
+              </label>
 
-            <label
-              class="border-2 rounded-xl p-3 cursor-pointer flex items-center justify-between"
-              :class="excelFormat === 'csv' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800'"
-            >
-              <div>
-                <div class="text-xs font-bold text-slate-900 dark:text-slate-100">Raw CSV (.csv)</div>
-                <div class="text-[10px] text-slate-400">Universal data format</div>
-              </div>
-              <input
-                v-model="excelFormat"
-                type="radio"
-                value="csv"
+              <label
+                class="border-2 rounded-xl p-3 cursor-pointer flex items-center justify-between transition-all"
+                :class="excelFormat === 'csv' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'"
               >
-            </label>
+                <div>
+                  <div class="text-xs font-bold text-slate-900 dark:text-slate-100">Raw CSV (.csv)</div>
+                  <div class="text-[10px] text-slate-400">Universal data format</div>
+                </div>
+                <input
+                  v-model="excelFormat"
+                  type="radio"
+                  value="csv"
+                  class="text-primary"
+                >
+              </label>
+            </div>
           </div>
 
-          <p class="text-xs text-slate-400 leading-relaxed">
-            • Spatial coordinate engine automatically groups table columns, rows, numbers, and currencies into structured spreadsheet cells.
-          </p>
+          <!-- Multi-Page Sheet Structure -->
+          <div class="space-y-2">
+            <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Worksheet Organization</span>
+            <div class="grid grid-cols-2 gap-2.5">
+              <label
+                class="border-2 rounded-xl p-3 cursor-pointer flex items-center justify-between transition-all"
+                :class="excelSheetMode === 'multi_sheet' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'"
+              >
+                <div>
+                  <div class="text-xs font-bold text-slate-900 dark:text-slate-100">Separate Sheets</div>
+                  <div class="text-[10px] text-slate-400">One tab per PDF page</div>
+                </div>
+                <input
+                  v-model="excelSheetMode"
+                  type="radio"
+                  value="multi_sheet"
+                  class="text-primary"
+                >
+              </label>
+
+              <label
+                class="border-2 rounded-xl p-3 cursor-pointer flex items-center justify-between transition-all"
+                :class="excelSheetMode === 'single_sheet' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'"
+              >
+                <div>
+                  <div class="text-xs font-bold text-slate-900 dark:text-slate-100">Single Master Sheet</div>
+                  <div class="text-[10px] text-slate-400">All pages consolidated</div>
+                </div>
+                <input
+                  v-model="excelSheetMode"
+                  type="radio"
+                  value="single_sheet"
+                  class="text-primary"
+                >
+              </label>
+            </div>
+          </div>
         </div>
 
-        <!-- Extraction Stats Banner -->
+        <!-- Extraction Filters -->
+        <div class="flex items-center gap-2 pt-1">
+          <input
+            id="tableOnlyCheckbox"
+            v-model="excelTableOnly"
+            type="checkbox"
+            class="rounded text-primary border-slate-300 focus:ring-primary"
+          >
+          <label
+            for="tableOnlyCheckbox"
+            class="text-xs text-slate-600 dark:text-slate-300 cursor-pointer"
+          >
+            Extract <b>structured tables only</b> (exclude introductory paragraphs and notes from spreadsheet)
+          </label>
+        </div>
+
+        <p class="text-xs text-slate-400 leading-relaxed">
+          • Spatial coordinate engine automatically groups table columns, aligns missing cells without left-shifting, parses currency values, and formats data cells into native spreadsheet types.
+        </p>
+
+        <!-- Extraction Stats & Preview Banner -->
         <div
           v-if="excelStats"
-          class="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 flex items-center gap-2"
+          class="space-y-4 pt-2"
         >
-          <UIcon
-            name="i-lucide-check-circle"
-            class="w-4 h-4 text-emerald-500 shrink-0"
-          />
-          <span>
-            Successfully extracted <b>{{ excelStats.rowCount }} rows</b> and <b>{{ excelStats.colCount }} columns</b> into <b>{{ excelStats.filename }}</b>.
-          </span>
+          <div class="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <UIcon
+                name="i-lucide-check-circle"
+                class="w-4 h-4 text-emerald-500 shrink-0"
+              />
+              <span>
+                Exported <b>{{ excelStats.filename }}</b> with high-precision column alignment.
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-[11px] bg-emerald-200/80 dark:bg-emerald-900 px-2 py-0.5 rounded font-semibold">
+                {{ excelStats.tableCount }} Tables
+              </span>
+              <span class="font-mono text-[11px] bg-emerald-200/80 dark:bg-emerald-900 px-2 py-0.5 rounded font-semibold">
+                {{ excelStats.rowCount }} Data Rows
+              </span>
+              <span class="font-mono text-[11px] bg-emerald-200/80 dark:bg-emerald-900 px-2 py-0.5 rounded font-semibold">
+                {{ excelStats.colCount }} Columns
+              </span>
+            </div>
+          </div>
+
+          <!-- Live Table Preview -->
+          <div
+            v-if="excelStats.previewRows && excelStats.previewRows.length > 0"
+            class="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900"
+          >
+            <div class="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
+              <span class="flex items-center gap-1.5">
+                <UIcon
+                  name="i-lucide-table"
+                  class="w-3.5 h-3.5 text-primary"
+                />
+                Live Extracted Data Preview (First {{ excelStats.previewRows.length }} Rows)
+              </span>
+              <span class="text-[10px] text-slate-400 font-normal">
+                Verifies exact column alignment before spreadsheet opening
+              </span>
+            </div>
+            <div class="overflow-x-auto max-h-64">
+              <table class="w-full text-xs text-left">
+                <tbody>
+                  <tr
+                    v-for="(pRow, rIdx) in excelStats.previewRows"
+                    :key="rIdx"
+                    :class="rIdx === 0 ? 'bg-slate-800 text-white font-semibold' : (rIdx % 2 === 0 ? 'bg-slate-50/50 dark:bg-slate-800/30' : 'bg-white dark:bg-slate-900')"
+                    class="border-b border-slate-100 dark:border-slate-800/60"
+                  >
+                    <td
+                      v-for="(pCell, cIdx) in pRow"
+                      :key="cIdx"
+                      class="px-3 py-2 border-r border-slate-200/50 dark:border-slate-800/60 last:border-r-0 truncate max-w-xs"
+                      :class="typeof pCell === 'number' ? 'text-right font-mono' : ''"
+                    >
+                      {{ pCell !== '' ? pCell : '—' }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -813,27 +945,57 @@ function copyImageToClipboard(img: PageImageOutput) {
           Word Document Reflow Settings
         </h3>
 
-        <div class="max-w-lg space-y-2 text-xs text-slate-500 leading-relaxed">
-          <p>
-            • The in-browser reflow engine analyzes document typography to synthesize <b>Heading 1</b>, <b>Heading 2</b>, continuous body paragraphs, and native <b>Word Tables</b>.
-          </p>
-          <p>
-            • Output format: <b>Microsoft Word Document (.docx)</b> compatible with Microsoft Word, Google Docs, Apple Pages, and LibreOffice.
-          </p>
+        <div class="max-w-xl space-y-3">
+          <div class="flex items-center gap-2">
+            <input
+              id="preservePageBreaksCheckbox"
+              v-model="wordPreservePageBreaks"
+              type="checkbox"
+              class="rounded text-primary border-slate-300 focus:ring-primary"
+            >
+            <label
+              for="preservePageBreaksCheckbox"
+              class="text-xs text-slate-700 dark:text-slate-300 cursor-pointer"
+            >
+              Preserve original <b>PDF page breaks</b> between sections
+            </label>
+          </div>
+
+          <div class="space-y-1.5 text-xs text-slate-500 leading-relaxed">
+            <p>
+              • The in-browser reflow engine analyzes document typography to synthesize <b>Heading 1</b>, <b>Heading 2</b>, continuous flowing body paragraphs, and <b>unified multi-row native Word Tables</b> with aligned columns and borders.
+            </p>
+            <p>
+              • Output format: <b>Microsoft Word Document (.docx)</b> compatible with Microsoft Word, Google Docs, Apple Pages, and LibreOffice.
+            </p>
+          </div>
         </div>
 
         <!-- Word Stats Banner -->
         <div
           v-if="wordStats"
-          class="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 flex items-center gap-2"
+          class="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 flex flex-wrap items-center justify-between gap-3"
         >
-          <UIcon
-            name="i-lucide-check-circle"
-            class="w-4 h-4 text-emerald-500 shrink-0"
-          />
-          <span>
-            Compiled <b>{{ wordStats.paragraphsCount }} paragraphs and tables</b> into <b>{{ wordStats.filename }}</b>.
-          </span>
+          <div class="flex items-center gap-2">
+            <UIcon
+              name="i-lucide-check-circle"
+              class="w-4 h-4 text-emerald-500 shrink-0"
+            />
+            <span>
+              Compiled <b>{{ wordStats.filename }}</b> with native Word typography.
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-[11px] bg-emerald-200/80 dark:bg-emerald-900 px-2 py-0.5 rounded font-semibold">
+              {{ wordStats.headingsCount }} Headings
+            </span>
+            <span class="font-mono text-[11px] bg-emerald-200/80 dark:bg-emerald-900 px-2 py-0.5 rounded font-semibold">
+              {{ wordStats.paragraphsCount }} Flowing Paragraphs
+            </span>
+            <span class="font-mono text-[11px] bg-emerald-200/80 dark:bg-emerald-900 px-2 py-0.5 rounded font-semibold">
+              {{ wordStats.tablesCount }} Native Tables
+            </span>
+          </div>
         </div>
       </div>
 
@@ -958,9 +1120,9 @@ function copyImageToClipboard(img: PageImageOutput) {
         </div>
       </div>
 
-      <!-- 8. Visual Page Grid (For Rotate & Remove Pages) -->
+      <!-- 8. Visual Page Grid (For Organize, Rotate & Remove Pages) -->
       <div
-        v-if="pages.length > 0 && ['rotate', 'remove-pages'].includes(toolId)"
+        v-if="pages.length > 0 && ['organize', 'rotate', 'remove-pages'].includes(toolId)"
         class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs"
       >
         <PdfPageGrid
@@ -968,6 +1130,7 @@ function copyImageToClipboard(img: PageImageOutput) {
           :is-loading-thumbnails="isLoadingThumbnails"
           @rotate-page="handleRotatePage"
           @toggle-delete-page="handleToggleDeletePage"
+          @move-page="handleMovePage"
           @reset-all="handleResetEdits"
         />
       </div>
