@@ -87,7 +87,7 @@ export async function generateAITechnicalReview(
     })
   }
 
-  const selectedModel = process.env.GROQ_MODEL?.trim() || 'openai/gpt-oss-120b'
+  const selectedModel = process.env.GROQ_MODEL?.trim() || 'llama-3.1-8b-instant'
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',

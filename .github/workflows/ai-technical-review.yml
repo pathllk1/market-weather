@@ -10,11 +10,11 @@ on:
       min_score:
         description: 'Minimum algorithmic score threshold (>=)'
         required: false
-        default: '60'
+        default: '65'
       limit:
-        description: 'Maximum stocks to evaluate (0 = ALL matching stocks)'
+        description: 'Maximum stocks to evaluate (recommended: 20 for free tier to prevent 429)'
         required: false
-        default: '0'
+        default: '20'
       batch_size:
         description: 'Stocks per batch'
         required: false
@@ -22,11 +22,11 @@ on:
       delay_ms:
         description: 'Pause between stocks in ms'
         required: false
-        default: '2000'
+        default: '1500'
       batch_delay_ms:
         description: 'Cooldown pause between batches in ms'
         required: false
-        default: '6000'
+        default: '4000'
       force:
         description: 'Force re-analysis even if already reviewed in last 16 hours'
         type: boolean
@@ -64,12 +64,12 @@ jobs:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'openai/gpt-oss-120b' }}
+          GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.1-8b-instant' }}
         run: |
           pnpm run cron:ai-review \
-            --min-score=${{ inputs.min_score || 60 }} \
-            --limit=${{ inputs.limit || 0 }} \
+            --min-score=${{ inputs.min_score || 65 }} \
+            --limit=${{ inputs.limit || 20 }} \
             --batch-size=${{ inputs.batch_size || 5 }} \
-            --delay-ms=${{ inputs.delay_ms || 2000 }} \
-            --batch-delay-ms=${{ inputs.batch_delay_ms || 6000 }} \
+            --delay-ms=${{ inputs.delay_ms || 1500 }} \
+            --batch-delay-ms=${{ inputs.batch_delay_ms || 4000 }} \
             ${{ (inputs.force == true || inputs.force == 'true') && '--force' || '' }}

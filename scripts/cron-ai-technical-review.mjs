@@ -26,7 +26,7 @@ const env = loadEnv()
 const TURSO_URL = env.TURSO_DATABASE_URL || 'file:turso_security.db'
 const TURSO_AUTH_TOKEN = env.TURSO_AUTH_TOKEN || undefined
 const GROQ_API_KEY = env.GROQ_API_KEY?.trim()
-const GROQ_MODEL = env.GROQ_MODEL?.trim() || 'openai/gpt-oss-120b'
+const GROQ_MODEL = env.GROQ_MODEL?.trim() || 'llama-3.1-8b-instant'
 
 if (!GROQ_API_KEY) {
   console.error('CRITICAL ERROR: GROQ_API_KEY is not defined in environment variables.')
@@ -42,11 +42,11 @@ const db = createClient({
 function parseArgs() {
   const args = process.argv.slice(2)
   const config = {
-    minScore: 60,
-    limit: 0,
+    minScore: 65,
+    limit: 20,
     batchSize: 5,
-    delayMs: 2000,
-    batchDelayMs: 6000,
+    delayMs: 1500,
+    batchDelayMs: 4000,
     maxRetries: 3,
     force: false,
     symbol: null
@@ -144,8 +144,10 @@ IMPORTANT RULES:
 
       // Retryable errors: 429 (Rate Limit), 500, 502, 503, 504
       if (status === 429 || (status >= 500 && status <= 504)) {
-        const backoffMs = attempt * 3000
-        console.warn(`[RETRY ${attempt}/${maxRetries}] Groq returned status ${status}. Waiting ${backoffMs / 1000}s before retrying...`)
+        const retryAfterHeader = response.headers.get('retry-after')
+        const retryAfterSec = retryAfterHeader ? Number(retryAfterHeader) : null
+        const backoffMs = retryAfterSec ? (retryAfterSec + 1) * 1000 : (attempt * 4000)
+        console.warn(`[RETRY ${attempt}/${maxRetries}] Groq returned status ${status}. Waiting ${Math.round(backoffMs / 1000)}s before retrying...`)
         await sleep(backoffMs)
         continue
       } else {
