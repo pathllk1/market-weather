@@ -60,6 +60,10 @@ interface HoveredBar {
   close?: number
   value?: number
   volume?: number
+  sma20?: number
+  sma50?: number
+  bbUpper?: number
+  bbLower?: number
 }
 const hoveredBar = ref<HoveredBar | null>(null)
 
@@ -71,6 +75,24 @@ let currentBar: {
   low: number
   close: number
 } | null = null
+
+// Historical Cache & Real-Time Sync State
+const LOOKBACK_BUFFER = 60
+let cachedRawData: Array<{
+  time: number
+  openUsdt: number
+  highUsdt: number
+  lowUsdt: number
+  closeUsdt: number
+  openInr: number
+  highInr: number
+  lowInr: number
+  closeInr: number
+  volume: number
+}> = []
+let recentClosePoints: number[] = []
+let lastLoadedSymbol = ''
+let lastLoadedInterval = ''
 
 const ranges = [
   { label: '24H', value: '24H' },
@@ -126,46 +148,66 @@ function handleRangeChange(range: '24H' | '7D' | '1M' | '3M' | '1Y') {
   selectedRange.value = range
   const config = resolveRangeConfig(range)
   selectedInterval.value = config.interval as '15m' | '1h' | '4h' | '1d'
-  loadAndRenderChart()
+  loadAndRenderChart(true)
 }
 
 function handleIntervalChange(interval: '15m' | '1h' | '4h' | '1d') {
   selectedInterval.value = interval
-  loadAndRenderChart()
+  loadAndRenderChart(true)
 }
 
-// Indicator Calculation Helpers
-function calculateSma(data: Array<{ time: number, close: number }>, period: number) {
+// Institutional SMA calculation supporting full lookback buffer & progressive expanding start
+function calculateSma(data: Array<{ time: number, close: number }>, period: number): Array<{ time: number, value: number }> {
   const result: Array<{ time: number, value: number }> = []
-  for (let i = period - 1; i < data.length; i++) {
-    let sum = 0
-    for (let j = 0; j < period; j++) {
-      sum += data[i - j]!.close
+  if (!data.length) return result
+
+  let runningSum = 0
+
+  for (let i = 0; i < data.length; i++) {
+    const val = data[i]!.close
+    runningSum += val
+
+    if (i >= period) {
+      runningSum -= data[i - period]!.close
+      result.push({
+        time: data[i]!.time,
+        value: Number((runningSum / period).toFixed(4))
+      })
+    } else {
+      // Expanding mean for initial warm-up period (so starting positions are always equal)
+      result.push({
+        time: data[i]!.time,
+        value: Number((runningSum / (i + 1)).toFixed(4))
+      })
     }
-    result.push({
-      time: data[i]!.time,
-      value: Number((sum / period).toFixed(4))
-    })
   }
+
   return result
 }
 
-function calculateBollinger(data: Array<{ time: number, close: number }>, period = 20, multiplier = 2) {
+// Institutional Bollinger Bands with lookback buffer & progressive sample deviation
+function calculateBollinger(
+  data: Array<{ time: number, close: number }>,
+  period = 20,
+  multiplier = 2
+): { upper: Array<{ time: number, value: number }>, lower: Array<{ time: number, value: number }> } {
   const upper: Array<{ time: number, value: number }> = []
   const lower: Array<{ time: number, value: number }> = []
+  if (!data.length) return { upper, lower }
 
-  for (let i = period - 1; i < data.length; i++) {
+  for (let i = 0; i < data.length; i++) {
+    const windowSize = Math.min(period, i + 1)
     let sum = 0
-    for (let j = 0; j < period; j++) {
+    for (let j = 0; j < windowSize; j++) {
       sum += data[i - j]!.close
     }
-    const mean = sum / period
+    const mean = sum / windowSize
 
     let varianceSum = 0
-    for (let j = 0; j < period; j++) {
+    for (let j = 0; j < windowSize; j++) {
       varianceSum += Math.pow(data[i - j]!.close - mean, 2)
     }
-    const stdDev = Math.sqrt(varianceSum / period)
+    const stdDev = windowSize > 1 ? Math.sqrt(varianceSum / windowSize) : 0
 
     upper.push({
       time: data[i]!.time,
@@ -176,19 +218,34 @@ function calculateBollinger(data: Array<{ time: number, close: number }>, period
       value: Number((mean - multiplier * stdDev).toFixed(4))
     })
   }
+
   return { upper, lower }
 }
 
-async function loadAndRenderChart() {
+async function loadAndRenderChart(forceRefetch = false) {
   if (!chartContainer.value || !props.asset) return
-  isLoading.value = true
-  const thisSeq = ++fetchSeq
 
   const config = resolveRangeConfig(selectedRange.value)
   const reqInterval = selectedInterval.value || config.interval
   const reqLimit = config.limit
 
+  // Fast-path: Instant re-render if data already in memory and symbol/interval haven't changed
+  if (
+    !forceRefetch
+    && cachedRawData.length > 0
+    && lastLoadedSymbol === props.asset.symbol
+    && lastLoadedInterval === reqInterval
+  ) {
+    initOrUpdateChart(cachedRawData, reqLimit)
+    return
+  }
+
+  isLoading.value = true
+  const thisSeq = ++fetchSeq
+
   try {
+    // Request additional lookback candles so SMA20, SMA50, and Bollinger Bands have true historical warm-up
+    const totalLimit = Math.min(reqLimit + LOOKBACK_BUFFER, 1000)
     const res = await $fetch<{
       success: boolean
       data: Array<{
@@ -203,12 +260,16 @@ async function loadAndRenderChart() {
         closeInr: number
         volume: number
       }>
-    }>(`/api/crypto/klines?symbol=${props.asset.symbol}&interval=${reqInterval}&limit=${reqLimit}`)
+    }>(`/api/crypto/klines?symbol=${props.asset.symbol}&interval=${reqInterval}&limit=${totalLimit}`)
 
     if (thisSeq !== fetchSeq) return
     if (!res?.success || !res.data?.length) return
 
-    initOrUpdateChart(res.data)
+    cachedRawData = res.data
+    lastLoadedSymbol = props.asset.symbol
+    lastLoadedInterval = reqInterval
+
+    initOrUpdateChart(res.data, reqLimit)
   } catch (err) {
     console.error('Failed to load klines:', err)
   } finally {
@@ -230,7 +291,8 @@ function initOrUpdateChart(
     lowInr: number
     closeInr: number
     volume: number
-  }>
+  }>,
+  reqLimit: number
 ) {
   if (!chartContainer.value) return
 
@@ -258,6 +320,28 @@ function initOrUpdateChart(
     }
   }
 
+  const isINR = currencyDisplay.value === 'INR'
+
+  // Pre-calculate technical indicators across the entire dataset (including buffer)
+  const allClosePoints = uniqueData.map(d => ({
+    time: d.time,
+    close: isINR ? d.closeInr : d.closeUsdt
+  }))
+
+  recentClosePoints = allClosePoints.map(p => p.close)
+
+  const allSma20 = calculateSma(allClosePoints, 20)
+  const allSma50 = calculateSma(allClosePoints, 50)
+  const allBb = calculateBollinger(allClosePoints, 20, 2)
+
+  // Align visible window: slice the trailing reqLimit candles
+  const visibleStartIndex = Math.max(0, uniqueData.length - reqLimit)
+  const visibleData = uniqueData.slice(visibleStartIndex)
+  const visibleSma20 = allSma20.slice(visibleStartIndex)
+  const visibleSma50 = allSma50.slice(visibleStartIndex)
+  const visibleBbUpper = allBb.upper.slice(visibleStartIndex)
+  const visibleBbLower = allBb.lower.slice(visibleStartIndex)
+
   const width = chartContainer.value.clientWidth || 800
   const height = isFullscreen.value ? 580 : 380
 
@@ -281,7 +365,6 @@ function initOrUpdateChart(
       },
       autoScale: true
     },
-    // FIX: Lock left & right edges to eliminate empty whitespace gaps
     timeScale: {
       borderColor: '#e2e8f0',
       timeVisible: true,
@@ -343,8 +426,6 @@ function initOrUpdateChart(
     }
   })
 
-  const isINR = currencyDisplay.value === 'INR'
-
   // 1. Main Price Series (Candles or Area)
   if (chartType.value === 'candlestick') {
     mainSeries = chart.addSeries(CandlestickSeries, {
@@ -360,7 +441,7 @@ function initOrUpdateChart(
       }
     })
 
-    const formattedData = uniqueData.map(d => ({
+    const formattedData = visibleData.map(d => ({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       time: d.time as any,
       open: isINR ? d.openInr : d.openUsdt,
@@ -394,7 +475,7 @@ function initOrUpdateChart(
       }
     })
 
-    const formattedData = uniqueData.map(d => ({
+    const formattedData = visibleData.map(d => ({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       time: d.time as any,
       value: isINR ? d.closeInr : d.closeUsdt
@@ -432,7 +513,7 @@ function initOrUpdateChart(
     }
   })
 
-  const volumeData = uniqueData.map(d => ({
+  const volumeData = visibleData.map(d => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     time: d.time as any,
     value: d.volume,
@@ -441,13 +522,8 @@ function initOrUpdateChart(
 
   volumeSeries.setData(volumeData)
 
-  // 3. Technical Indicator Overlays
-  const closePoints = uniqueData.map(d => ({
-    time: d.time,
-    close: isINR ? d.closeInr : d.closeUsdt
-  }))
-
-  if (showSma20.value && closePoints.length >= 20) {
+  // 3. Technical Indicator Overlays - All with 100% equal starting timestamp and warm-up accuracy
+  if (showSma20.value && visibleSma20.length > 0) {
     sma20Series = chart.addSeries(LineSeries, {
       color: '#3b82f6',
       lineWidth: 2,
@@ -455,10 +531,10 @@ function initOrUpdateChart(
       lastValueVisible: false
     })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    sma20Series.setData(calculateSma(closePoints, 20) as any)
+    sma20Series.setData(visibleSma20 as any)
   }
 
-  if (showSma50.value && closePoints.length >= 50) {
+  if (showSma50.value && visibleSma50.length > 0) {
     sma50Series = chart.addSeries(LineSeries, {
       color: '#f59e0b',
       lineWidth: 2,
@@ -466,11 +542,10 @@ function initOrUpdateChart(
       lastValueVisible: false
     })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    sma50Series.setData(calculateSma(closePoints, 50) as any)
+    sma50Series.setData(visibleSma50 as any)
   }
 
-  if (showBollinger.value && closePoints.length >= 20) {
-    const bb = calculateBollinger(closePoints, 20, 2)
+  if (showBollinger.value && visibleBbUpper.length > 0) {
     bbUpperSeries = chart.addSeries(LineSeries, {
       color: '#8b5cf6',
       lineWidth: 1,
@@ -486,9 +561,9 @@ function initOrUpdateChart(
       lastValueVisible: false
     })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    bbUpperSeries.setData(bb.upper as any)
+    bbUpperSeries.setData(visibleBbUpper as any)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    bbLowerSeries.setData(bb.lower as any)
+    bbLowerSeries.setData(visibleBbLower as any)
   }
 
   // 4. Floating Crosshair Legend Tracking
@@ -505,6 +580,15 @@ function initOrUpdateChart(
     } else if (mainSeries) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = param.seriesData.get(mainSeries) as any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s20 = sma20Series ? param.seriesData.get(sma20Series) as any : null
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s50 = sma50Series ? param.seriesData.get(sma50Series) as any : null
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bbU = bbUpperSeries ? param.seriesData.get(bbUpperSeries) as any : null
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bbL = bbLowerSeries ? param.seriesData.get(bbLowerSeries) as any : null
+
       if (data) {
         hoveredBar.value = {
           time: param.time as number,
@@ -512,7 +596,11 @@ function initOrUpdateChart(
           high: data.high,
           low: data.low,
           close: data.close,
-          value: data.value
+          value: data.value,
+          sma20: s20?.value,
+          sma50: s50?.value,
+          bbUpper: bbU?.value,
+          bbLower: bbL?.value
         }
       }
     }
@@ -522,7 +610,7 @@ function initOrUpdateChart(
   chart.timeScale().fitContent()
 }
 
-// Real-Time Tick Update: Moves the current candle on live WebSocket tick
+// Real-Time Tick Update: Moves the current candle and indicators in lockstep on live WebSocket tick
 watch(
   () => [props.asset?.priceUsdt, props.asset?.priceInr],
   () => {
@@ -542,14 +630,51 @@ watch(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         mainSeries.update({ time: currentBar.time as any, value: currentBar.close })
       }
+
+      // Synchronously update real-time indicator points
+      if (recentClosePoints.length > 0) {
+        recentClosePoints[recentClosePoints.length - 1] = newPrice
+
+        if (showSma20.value && sma20Series) {
+          const w20 = recentClosePoints.slice(-20)
+          const sma20Val = w20.reduce((a, b) => a + b, 0) / w20.length
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          sma20Series.update({ time: currentBar.time as any, value: Number(sma20Val.toFixed(4)) })
+        }
+
+        if (showSma50.value && sma50Series) {
+          const w50 = recentClosePoints.slice(-50)
+          const sma50Val = w50.reduce((a, b) => a + b, 0) / w50.length
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          sma50Series.update({ time: currentBar.time as any, value: Number(sma50Val.toFixed(4)) })
+        }
+
+        if (showBollinger.value && bbUpperSeries && bbLowerSeries) {
+          const w20 = recentClosePoints.slice(-20)
+          const mean = w20.reduce((a, b) => a + b, 0) / w20.length
+          const variance = w20.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / w20.length
+          const stdDev = Math.sqrt(variance)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          bbUpperSeries.update({ time: currentBar.time as any, value: Number((mean + 2 * stdDev).toFixed(4)) })
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          bbLowerSeries.update({ time: currentBar.time as any, value: Number((mean - 2 * stdDev).toFixed(4)) })
+        }
+      }
     }
   }
 )
 
 watch(
-  () => [props.asset?.symbol, chartType.value, currencyDisplay.value, showSma20.value, showSma50.value, showBollinger.value, isFullscreen.value],
+  () => [props.asset?.symbol, selectedRange.value, selectedInterval.value],
   () => {
-    nextTick(() => loadAndRenderChart())
+    nextTick(() => loadAndRenderChart(true))
+  }
+)
+
+watch(
+  () => [chartType.value, currencyDisplay.value, showSma20.value, showSma50.value, showBollinger.value, isFullscreen.value],
+  () => {
+    nextTick(() => loadAndRenderChart(false))
   }
 )
 
@@ -561,7 +686,7 @@ onMounted(() => {
     })
     resizeObserver.observe(chartContainer.value)
   }
-  loadAndRenderChart()
+  loadAndRenderChart(true)
 })
 
 onUnmounted(() => {
@@ -614,8 +739,8 @@ onUnmounted(() => {
 
           <!-- Price & Hovered OHLC Legend -->
           <div class="flex items-baseline gap-3 mt-0.5 flex-wrap">
-            <div class="flex items-baseline gap-1.5">
-              <span class="text-xl font-extrabold text-slate-900 tracking-tight">
+            <div class="flex items-baseline gap-1.5 font-mono tabular-nums">
+              <span class="text-xl font-black text-slate-900 tracking-tight">
                 {{ formatInr(asset.priceInr) }}
               </span>
               <span class="text-xs text-slate-400 font-medium">
@@ -626,7 +751,7 @@ onUnmounted(() => {
             <!-- Dynamic Floating Crosshair OHLC Legend -->
             <div
               v-if="hoveredBar"
-              class="hidden lg:flex items-center gap-2 text-xs font-mono bg-slate-50 px-2.5 py-0.5 rounded border border-slate-200/80"
+              class="hidden lg:flex items-center gap-2 text-xs font-mono tabular-nums bg-slate-50 px-2.5 py-0.5 rounded border border-slate-200/80 shadow-2xs flex-wrap"
             >
               <template v-if="hoveredBar.time">
                 <span class="text-slate-500 font-semibold">
@@ -643,20 +768,32 @@ onUnmounted(() => {
               <template v-else-if="hoveredBar.value !== undefined">
                 <span class="text-slate-400">Price: <strong class="text-slate-800">{{ formatPriceOnAxis(hoveredBar.value) }}</strong></span>
               </template>
+              <template v-if="showSma20 && hoveredBar.sma20 !== undefined">
+                <span class="text-slate-300">|</span>
+                <span class="text-blue-600 font-semibold">SMA20: {{ formatPriceOnAxis(hoveredBar.sma20) }}</span>
+              </template>
+              <template v-if="showSma50 && hoveredBar.sma50 !== undefined">
+                <span class="text-slate-300">|</span>
+                <span class="text-amber-600 font-semibold">SMA50: {{ formatPriceOnAxis(hoveredBar.sma50) }}</span>
+              </template>
+              <template v-if="showBollinger && hoveredBar.bbUpper !== undefined">
+                <span class="text-slate-300">|</span>
+                <span class="text-purple-600 font-semibold">BB: [{{ formatPriceOnAxis(hoveredBar.bbLower || 0) }} - {{ formatPriceOnAxis(hoveredBar.bbUpper || 0) }}]</span>
+              </template>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Controls: Time Ranges, Intervals, Chart Type, Overlays & Scale -->
-      <div class="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+      <div class="flex flex-wrap items-center gap-1.5 w-full md:w-auto justify-end">
         <!-- 1. Range Presets (24H, 7D, 1M, 3M, 1Y) -->
-        <div class="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs font-semibold text-slate-600">
+        <div class="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200/60">
           <button
             v-for="r in ranges"
             :key="r.value"
             class="px-2.5 py-1 rounded-md transition-all cursor-pointer"
-            :class="selectedRange === r.value ? 'bg-white text-blue-700 font-bold shadow-xs' : 'hover:text-slate-900'"
+            :class="selectedRange === r.value ? 'bg-white text-blue-700 font-bold shadow-2xs' : 'hover:text-slate-900'"
             @click="handleRangeChange(r.value as any)"
           >
             {{ r.label }}
@@ -664,11 +801,11 @@ onUnmounted(() => {
         </div>
 
         <!-- 2. Granular Interval Pills (15m, 1h, 4h, 1d) -->
-        <div class="flex items-center bg-slate-100 p-0.5 rounded-lg text-[11px] font-medium text-slate-500">
+        <div class="flex items-center bg-slate-100 p-0.5 rounded-lg text-[11px] font-medium text-slate-500 border border-slate-200/60">
           <button
             v-for="int in intervals"
             :key="int.value"
-            class="px-2 py-1 rounded-md transition-all cursor-pointer"
+            class="px-2 py-1 rounded-md transition-all cursor-pointer font-semibold"
             :class="selectedInterval === int.value ? 'bg-white text-slate-900 font-bold shadow-2xs' : 'hover:text-slate-900'"
             @click="handleIntervalChange(int.value as any)"
           >
@@ -676,72 +813,75 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <!-- 3. Indicators Dropdown / Toggles -->
-        <div class="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-[11px] font-semibold text-slate-600">
+        <!-- 3. Indicators Toggles with Active State Glow -->
+        <div class="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200/60">
           <button
-            class="px-2 py-1 rounded transition-colors cursor-pointer"
-            :class="showSma20 ? 'bg-blue-600 text-white' : 'hover:bg-slate-200'"
+            class="px-2 py-1 rounded transition-all cursor-pointer flex items-center gap-1"
+            :class="showSma20 ? 'bg-blue-600 text-white shadow-2xs' : 'hover:bg-slate-200/80 text-slate-600'"
             title="Simple Moving Average 20"
             @click="showSma20 = !showSma20"
           >
-            SMA20
+            <span class="w-1.5 h-1.5 rounded-full" :class="showSma20 ? 'bg-white' : 'bg-blue-500'" />
+            <span>SMA20</span>
           </button>
           <button
-            class="px-2 py-1 rounded transition-colors cursor-pointer"
-            :class="showSma50 ? 'bg-amber-600 text-white' : 'hover:bg-slate-200'"
+            class="px-2 py-1 rounded transition-all cursor-pointer flex items-center gap-1"
+            :class="showSma50 ? 'bg-amber-600 text-white shadow-2xs' : 'hover:bg-slate-200/80 text-slate-600'"
             title="Simple Moving Average 50"
             @click="showSma50 = !showSma50"
           >
-            SMA50
+            <span class="w-1.5 h-1.5 rounded-full" :class="showSma50 ? 'bg-white' : 'bg-amber-500'" />
+            <span>SMA50</span>
           </button>
           <button
-            class="px-2 py-1 rounded transition-colors cursor-pointer"
-            :class="showBollinger ? 'bg-purple-600 text-white' : 'hover:bg-slate-200'"
+            class="px-2 py-1 rounded transition-all cursor-pointer flex items-center gap-1"
+            :class="showBollinger ? 'bg-purple-600 text-white shadow-2xs' : 'hover:bg-slate-200/80 text-slate-600'"
             title="Bollinger Bands (20, 2)"
             @click="showBollinger = !showBollinger"
           >
-            BB
+            <span class="w-1.5 h-1.5 rounded-full" :class="showBollinger ? 'bg-white' : 'bg-purple-500'" />
+            <span>BB</span>
           </button>
         </div>
 
         <!-- 4. Chart Type Switcher -->
-        <div class="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs font-medium text-slate-600">
+        <div class="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs font-medium text-slate-600 border border-slate-200/60">
           <button
             class="px-2 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer"
-            :class="chartType === 'candlestick' ? 'bg-white text-slate-900 font-semibold shadow-xs' : 'hover:text-slate-900'"
+            :class="chartType === 'candlestick' ? 'bg-white text-slate-900 font-semibold shadow-2xs' : 'hover:text-slate-900'"
             @click="chartType = 'candlestick'"
           >
             <UIcon
               name="i-lucide-candlestick-chart"
               class="w-3.5 h-3.5"
             />
-            Candles
+            <span class="hidden sm:inline">Candles</span>
           </button>
           <button
             class="px-2 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer"
-            :class="chartType === 'area' ? 'bg-white text-slate-900 font-semibold shadow-xs' : 'hover:text-slate-900'"
+            :class="chartType === 'area' ? 'bg-white text-slate-900 font-semibold shadow-2xs' : 'hover:text-slate-900'"
             @click="chartType = 'area'"
           >
             <UIcon
               name="i-lucide-line-chart"
               class="w-3.5 h-3.5"
             />
-            Line
+            <span class="hidden sm:inline">Line</span>
           </button>
         </div>
 
         <!-- 5. Currency Scale Toggle -->
-        <div class="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs font-semibold text-slate-600">
+        <div class="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200/60">
           <button
             class="px-2.5 py-1 rounded-md transition-all cursor-pointer"
-            :class="currencyDisplay === 'INR' ? 'bg-blue-600 text-white shadow-xs' : 'hover:text-slate-900'"
+            :class="currencyDisplay === 'INR' ? 'bg-blue-600 text-white shadow-2xs' : 'hover:text-slate-900'"
             @click="currencyDisplay = 'INR'"
           >
             ₹ INR
           </button>
           <button
             class="px-2.5 py-1 rounded-md transition-all cursor-pointer"
-            :class="currencyDisplay === 'USDT' ? 'bg-blue-600 text-white shadow-xs' : 'hover:text-slate-900'"
+            :class="currencyDisplay === 'USDT' ? 'bg-blue-600 text-white shadow-2xs' : 'hover:text-slate-900'"
             @click="currencyDisplay = 'USDT'"
           >
             $ USDT
@@ -750,7 +890,7 @@ onUnmounted(() => {
 
         <!-- Fullscreen Expand Button -->
         <button
-          class="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
+          class="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer border border-slate-200/60"
           :title="isFullscreen ? 'Exit Fullscreen' : 'Expand Fullscreen'"
           @click="isFullscreen = !isFullscreen"
         >
@@ -765,22 +905,22 @@ onUnmounted(() => {
     <!-- 24h Stats Mini Bar -->
     <div
       v-if="asset"
-      class="grid grid-cols-2 sm:grid-cols-4 gap-4 py-2.5 px-3 my-2 bg-slate-50/80 rounded-lg text-xs border border-slate-100"
+      class="grid grid-cols-2 sm:grid-cols-4 gap-4 py-2 px-3 my-2 bg-slate-50/80 rounded-lg text-xs border border-slate-100 font-mono tabular-nums"
     >
       <div>
-        <span class="text-slate-400 block text-[10px] uppercase font-semibold">24h High (₹)</span>
+        <span class="text-slate-400 block text-[10px] uppercase font-semibold font-sans">24h High (₹)</span>
         <span class="font-bold text-slate-800">{{ formatInr(asset.high24hInr) }}</span>
       </div>
       <div>
-        <span class="text-slate-400 block text-[10px] uppercase font-semibold">24h Low (₹)</span>
+        <span class="text-slate-400 block text-[10px] uppercase font-semibold font-sans">24h Low (₹)</span>
         <span class="font-bold text-slate-800">{{ formatInr(asset.low24hInr) }}</span>
       </div>
       <div>
-        <span class="text-slate-400 block text-[10px] uppercase font-semibold">24h Turnover (₹ Cr)</span>
+        <span class="text-slate-400 block text-[10px] uppercase font-semibold font-sans">24h Turnover (₹ Cr)</span>
         <span class="font-bold text-slate-800">{{ formatInr(asset.quoteVolumeInr, { compact: true }) }}</span>
       </div>
       <div>
-        <span class="text-slate-400 block text-[10px] uppercase font-semibold">Trading Base Vol</span>
+        <span class="text-slate-400 block text-[10px] uppercase font-semibold font-sans">Trading Base Vol</span>
         <span class="font-bold text-slate-800">{{ asset.volume24h.toLocaleString(undefined, { maximumFractionDigits: 0 }) }} {{ asset.baseAsset }}</span>
       </div>
     </div>

@@ -638,7 +638,7 @@ export async function getCryptoKlines(
   const allowedIntervals = ['15m', '1h', '4h', '1d', '1w']
   const normalized = (interval || '').toLowerCase().trim()
   const cleanInterval = allowedIntervals.includes(normalized) ? normalized : '1h'
-  const cleanLimit = Math.min(Math.max(parseInt(String(limit), 10) || 50, 10), 500)
+  const cleanLimit = Math.min(Math.max(parseInt(String(limit), 10) || 50, 10), 1000)
 
   // 1. Try Binance Vision
   try {

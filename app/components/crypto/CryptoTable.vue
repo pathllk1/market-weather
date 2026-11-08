@@ -189,7 +189,7 @@ function calculateRangePercent(low: number, high: number, current: number) {
             <!-- Live INR Price (With real-time pulse flash) -->
             <td class="py-3 px-3.5 text-right">
               <span
-                class="inline-block px-1.5 py-0.5 rounded font-extrabold text-slate-900 tracking-tight transition-all duration-300"
+                class="inline-block px-1.5 py-0.5 rounded font-extrabold text-slate-900 tracking-tight transition-all duration-300 font-mono tabular-nums"
                 :class="{
                   'bg-emerald-100 text-emerald-800 scale-105': tickFlashes[asset.symbol] === 'up',
                   'bg-rose-100 text-rose-800 scale-105': tickFlashes[asset.symbol] === 'down'
@@ -200,14 +200,14 @@ function calculateRangePercent(low: number, high: number, current: number) {
             </td>
 
             <!-- USDT Global Price -->
-            <td class="py-3 px-3.5 text-right text-slate-500 font-mono text-xs hidden sm:table-cell">
+            <td class="py-3 px-3.5 text-right text-slate-500 font-mono tabular-nums text-xs hidden sm:table-cell">
               {{ formatUsd(asset.priceUsdt) }}
             </td>
 
             <!-- 24h Change -->
             <td class="py-3 px-3.5 text-right">
               <span
-                class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-bold"
+                class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-bold font-mono tabular-nums"
                 :class="asset.change24h >= 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'"
               >
                 <UIcon
@@ -218,24 +218,28 @@ function calculateRangePercent(low: number, high: number, current: number) {
               </span>
             </td>
 
-            <!-- 24h High / Low Visual Range Bar -->
+            <!-- 24h High / Low Visual Range Bar with Indicator Dot -->
             <td class="py-3 px-3.5 hidden md:table-cell">
-              <div class="w-full">
-                <div class="flex justify-between text-[10px] text-slate-400 font-mono mb-1">
-                  <span>{{ formatInr(asset.low24hInr, { compact: true }) }}</span>
-                  <span>{{ formatInr(asset.high24hInr, { compact: true }) }}</span>
+              <div class="w-full max-w-[170px] mx-auto">
+                <div class="flex justify-between text-[10px] text-slate-400 font-mono tabular-nums mb-1">
+                  <span class="text-rose-500/80 font-medium">L: {{ formatInr(asset.low24hInr, { compact: true }) }}</span>
+                  <span class="text-emerald-500/80 font-medium">H: {{ formatInr(asset.high24hInr, { compact: true }) }}</span>
                 </div>
-                <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden relative">
+                <div class="w-full bg-slate-200/80 h-1.5 rounded-full relative flex items-center">
                   <div
-                    class="bg-blue-500 h-full rounded-full transition-all duration-300"
+                    class="h-full rounded-full bg-gradient-to-r from-rose-400 via-amber-400 to-emerald-400"
                     :style="{ width: `${calculateRangePercent(asset.low24hInr, asset.high24hInr, asset.priceInr)}%` }"
+                  />
+                  <div
+                    class="absolute -top-0.5 w-2.5 h-2.5 bg-blue-600 rounded-full border-2 border-white shadow-2xs pointer-events-none transform -translate-x-1/2 transition-all duration-300"
+                    :style="{ left: `${calculateRangePercent(asset.low24hInr, asset.high24hInr, asset.priceInr)}%` }"
                   />
                 </div>
               </div>
             </td>
 
             <!-- 24h Turnover in INR -->
-            <td class="py-3 px-3.5 text-right font-semibold text-slate-800">
+            <td class="py-3 px-3.5 text-right font-semibold text-slate-800 font-mono tabular-nums">
               <div>{{ formatInr(asset.quoteVolumeInr, { compact: true }) }}</div>
               <div class="text-[10px] text-slate-400 font-normal">
                 {{ asset.volume24h.toLocaleString(undefined, { maximumFractionDigits: 0 }) }} {{ asset.baseAsset }}

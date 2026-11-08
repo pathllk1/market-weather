@@ -97,7 +97,7 @@ function scrollToChart() {
 </script>
 
 <template>
-  <div class="w-full min-h-screen bg-slate-50/70 text-slate-900 pb-20">
+  <div class="w-full min-h-screen bg-slate-50/70 text-slate-900 pb-36 sm:pb-40">
     <!-- Page Header Banner (Compact, Low Vertical Footprint) -->
     <div class="w-full bg-white border-b border-slate-200/90 py-3.5 sm:py-4 px-4 sm:px-6 lg:px-8 mb-4 shadow-2xs">
       <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
