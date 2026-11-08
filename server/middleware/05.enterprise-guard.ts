@@ -15,13 +15,22 @@ export default defineEventHandler((event) => {
     return
   }
 
-  // 2. Explicit whitelist for authentication bootstrap endpoints
+  // 2. Explicit whitelist for authentication bootstrap endpoints & public data feeds
   const isAuthWhitelisted =
     path === '/api/auth/login' ||
     path === '/api/auth/register' ||
     path === '/api/auth/refresh' ||
     path === '/api/auth/logout' ||
-    path === '/api/auth/me'
+    path === '/api/auth/me' ||
+    path.startsWith('/api/public') ||
+    path === '/api/crypto/tickers' ||
+    path === '/api/crypto/klines' ||
+    path === '/api/crypto/depth' ||
+    path === '/api/crypto/inr-rate' ||
+    path === '/api/crypto/database/overview' ||
+    path === '/api/crypto/sync/status' ||
+    path.startsWith('/api/weather') ||
+    path.startsWith('/api/market')
 
   // Also exempt CRON background runner on sync trigger if valid secret is provided
   const authHeader = getHeader(event, 'x-sync-secret')

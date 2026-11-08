@@ -1,9 +1,19 @@
 import { useAuth } from '../composables/useAuth'
 
 export default defineNuxtRouteMiddleware(async (to) => {
-  // 1. Whitelist unauthenticated bootstrap & system error pages
-  const publicRoutes = ['/login', '/register', '/blocked']
-  const isPublicRoute = publicRoutes.includes(to.path)
+  // 1. Whitelist unauthenticated bootstrap, public landing & system pages
+  const publicRoutes = [
+    '/',
+    '/login',
+    '/register',
+    '/blocked',
+    '/crypto',
+    '/weather',
+    '/market',
+    '/mutual-funds',
+    '/pdf'
+  ]
+  const isPublicRoute = publicRoutes.includes(to.path) || to.path.startsWith('/pdf/') || Boolean(to.meta?.public)
 
   const { user, isInitialized, fetchMe } = useAuth()
 
