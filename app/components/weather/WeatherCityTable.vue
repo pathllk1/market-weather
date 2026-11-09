@@ -252,34 +252,34 @@ const emit = defineEmits<{
               <td class="px-3 py-3">
                 <div class="flex items-center gap-1.5 text-neutral-700 dark:text-neutral-300">
                   <UIcon
-                    :name="c.weatherCondition.icon"
+                    :name="c.weatherCondition?.icon || 'i-lucide-cloud'"
                     class="text-base shrink-0 text-primary"
                   />
                   <span class="truncate max-w-[110px] text-[11px]">
-                    {{ c.weatherCondition.description }}
+                    {{ c.weatherCondition?.description || 'Current Weather' }}
                   </span>
                 </div>
               </td>
 
               <!-- Temperature -->
               <td class="px-3 py-3 text-right font-mono font-bold text-neutral-900 dark:text-white">
-                {{ c.temperature.toFixed(1) }}°
+                {{ c.temperature != null ? c.temperature.toFixed(1) : '--' }}°
               </td>
 
               <!-- Feels Like -->
               <td class="px-3 py-3 text-right font-mono text-neutral-500 hidden sm:table-cell">
-                {{ c.apparentTemperature.toFixed(1) }}°
+                {{ c.apparentTemperature != null ? c.apparentTemperature.toFixed(1) : '--' }}°
               </td>
 
               <!-- Humidity -->
               <td class="px-3 py-3 text-right font-mono text-neutral-600 dark:text-neutral-400 hidden md:table-cell">
-                {{ c.relativeHumidity }}%
+                {{ c.relativeHumidity != null ? c.relativeHumidity : '--' }}%
               </td>
 
               <!-- Rain -->
               <td class="px-3 py-3 text-right font-mono">
                 <span
-                  v-if="c.precipitation > 0"
+                  v-if="c.precipitation != null && c.precipitation > 0"
                   class="text-cyan-600 dark:text-cyan-400 font-bold"
                 >
                   {{ c.precipitation.toFixed(1) }} mm
@@ -303,7 +303,7 @@ const emit = defineEmits<{
 
               <!-- PM2.5 -->
               <td class="px-3 py-3 text-right font-mono text-neutral-600 dark:text-neutral-400 hidden lg:table-cell">
-                {{ c.pm25.toFixed(1) }}
+                {{ c.pm25 != null ? c.pm25.toFixed(1) : '--' }}
               </td>
 
               <!-- Detail Action -->

@@ -181,7 +181,7 @@ function handleSvgMouseLeave() {
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
             <UIcon
-              :name="props.city.weatherCondition.icon"
+              :name="props.city.weatherCondition?.icon || 'i-lucide-cloud'"
               class="text-2xl"
             />
           </div>
@@ -205,7 +205,7 @@ function handleSvgMouseLeave() {
               />
             </div>
             <p class="text-xs text-neutral-500 mt-0.5">
-              {{ props.city.weatherCondition.description }} • GPS: {{ props.city.latitude }}°N, {{ props.city.longitude }}°E • Ingestion: Continuous Live Telemetry
+              {{ props.city.weatherCondition?.description || 'Current Weather' }} • GPS: {{ props.city.latitude }}°N, {{ props.city.longitude }}°E • Ingestion: Continuous Live Telemetry
             </p>
           </div>
         </div>
@@ -291,10 +291,10 @@ function handleSvgMouseLeave() {
               Temperature
             </div>
             <div class="text-2xl font-mono font-extrabold text-neutral-900 dark:text-white mt-1">
-              {{ props.city.temperature.toFixed(1) }}°C
+              {{ props.city.temperature != null ? props.city.temperature.toFixed(1) : '--' }}°C
             </div>
             <div class="text-[11px] text-neutral-400 mt-0.5">
-              Feels like {{ props.city.apparentTemperature.toFixed(1) }}°C
+              Feels like {{ props.city.apparentTemperature != null ? props.city.apparentTemperature.toFixed(1) : '--' }}°C
             </div>
           </div>
 
@@ -327,7 +327,7 @@ function handleSvgMouseLeave() {
               Wind & Time
             </div>
             <div class="text-2xl font-mono font-extrabold text-neutral-900 dark:text-white mt-1">
-              {{ props.city.windSpeed.toFixed(1) }} <span class="text-sm font-normal text-neutral-400">km/h</span>
+              {{ props.city.windSpeed != null ? props.city.windSpeed.toFixed(1) : '--' }} <span class="text-sm font-normal text-neutral-400">km/h</span>
             </div>
             <div class="text-[11px] text-neutral-400 mt-0.5 truncate">
               {{ props.city.timestampLocal }}
@@ -437,7 +437,7 @@ function handleSvgMouseLeave() {
                 <div class="flex items-center gap-1.5">
                   <span class="w-2 h-2 rounded-full bg-emerald-500" />
                   <span class="text-neutral-500">Temp:</span>
-                  <span class="font-bold text-neutral-900 dark:text-white">{{ activePoint.temperature.toFixed(1) }}°C</span>
+                  <span class="font-bold text-neutral-900 dark:text-white">{{ activePoint.temperature != null ? activePoint.temperature.toFixed(1) : '--' }}°C</span>
                 </div>
 
                 <div class="flex items-center gap-1.5">
@@ -468,7 +468,7 @@ function handleSvgMouseLeave() {
                     name="i-lucide-cloud-rain"
                     class="text-xs"
                   />
-                  <span>{{ activePoint.precipitation.toFixed(1) }} mm</span>
+                  <span>{{ activePoint.precipitation != null ? activePoint.precipitation.toFixed(1) : '0.0' }} mm</span>
                 </div>
               </div>
             </div>

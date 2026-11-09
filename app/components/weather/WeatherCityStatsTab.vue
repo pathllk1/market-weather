@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { CityWeatherStats, PeriodAggregatedRow, CityLatestWeather } from '~/types/weather'
+import type { CityWeatherStats, PeriodAggregatedRow, CityLatestWeather, StatMetric } from '~/types/weather'
 import WeatherAqiBadge from './WeatherAqiBadge.vue'
 
 const props = defineProps<{
@@ -66,6 +66,15 @@ const currentRows = computed<PeriodAggregatedRow[]>(() => {
   return rows
 })
 
+function aggregateMetrics(items: StatMetric[]): StatMetric {
+  if (!items.length) return { min: 0, max: 0, avg: 0 }
+  return {
+    min: Math.min(...items.map(i => i.min)),
+    max: Math.max(...items.map(i => i.max)),
+    avg: Number((items.reduce((sum, i) => sum + i.avg, 0) / items.length).toFixed(1))
+  }
+}
+
 // Current summary metrics for the active scope
 const activeSummary = computed(() => {
   if (!props.stats) return null
@@ -83,29 +92,31 @@ const activeSummary = computed(() => {
     }
   }
   if (activeSubScope.value === 'monthly') {
+    const months = props.stats.monthly.months
     return {
       scopeTitle: 'Monthly-Wise Aggregates',
       subtitle: 'Calendar month breakdown showing seasonal progression & monsoon impacts',
       temp: props.stats.monthly.summary.temperature,
       aqi: props.stats.monthly.summary.usAqi,
       aqiCat: props.stats.monthly.summary.aqiCategory,
-      pm25: props.stats.monthly.months[0]?.pm25 || { min: 0, max: 0, avg: 0 },
-      humidity: props.stats.monthly.months[0]?.humidity || { min: 0, max: 0, avg: 0 },
+      pm25: aggregateMetrics(months.map(m => m.pm25)),
+      humidity: aggregateMetrics(months.map(m => m.humidity)),
       rain: props.stats.monthly.summary.totalRain,
-      wind: props.stats.monthly.months[0]?.windSpeed || { min: 0, max: 0, avg: 0 }
+      wind: aggregateMetrics(months.map(m => m.windSpeed))
     }
   }
   if (activeSubScope.value === 'yearly') {
+    const years = props.stats.yearly.years
     return {
       scopeTitle: 'Yearly-Wise Aggregates',
       subtitle: 'Annual climate footprint, macro pollution trends & annual rainfall totals',
       temp: props.stats.yearly.summary.temperature,
       aqi: props.stats.yearly.summary.usAqi,
       aqiCat: props.stats.yearly.summary.aqiCategory,
-      pm25: props.stats.yearly.years[0]?.pm25 || { min: 0, max: 0, avg: 0 },
-      humidity: props.stats.yearly.years[0]?.humidity || { min: 0, max: 0, avg: 0 },
+      pm25: aggregateMetrics(years.map(y => y.pm25)),
+      humidity: aggregateMetrics(years.map(y => y.humidity)),
       rain: props.stats.yearly.summary.totalRain,
-      wind: props.stats.yearly.years[0]?.windSpeed || { min: 0, max: 0, avg: 0 }
+      wind: aggregateMetrics(years.map(y => y.windSpeed))
     }
   }
   return null

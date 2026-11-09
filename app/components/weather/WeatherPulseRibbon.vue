@@ -101,6 +101,7 @@ const emit = defineEmits<{
 
       <!-- 2. Cleanest Air Leader -->
       <button
+        v-if="props.pulse.cleanestCity"
         type="button"
         class="p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 shadow-xs text-left transition-all group"
         @click="emit('selectCity', props.pulse.cleanestCity.city)"
@@ -136,6 +137,7 @@ const emit = defineEmits<{
 
       <!-- 3. Most Polluted Hotspot -->
       <button
+        v-if="props.pulse.mostPollutedCity"
         type="button"
         class="p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 hover:border-red-500/50 dark:hover:border-red-500/50 shadow-xs text-left transition-all group"
         @click="emit('selectCity', props.pulse.mostPollutedCity.city)"
@@ -183,7 +185,10 @@ const emit = defineEmits<{
             {{ props.pulse.activeRainCount }} Rain Zones
           </span>
         </div>
-        <div class="flex items-center justify-between text-xs pt-1">
+        <div
+          v-if="props.pulse.hottestCity"
+          class="flex items-center justify-between text-xs pt-1"
+        >
           <span class="text-neutral-500">Hottest:</span>
           <button
             type="button"
@@ -193,7 +198,10 @@ const emit = defineEmits<{
             {{ props.pulse.hottestCity.city }} ({{ props.pulse.hottestCity.temperature }}°C)
           </button>
         </div>
-        <div class="flex items-center justify-between text-xs">
+        <div
+          v-if="props.pulse.coldestCity"
+          class="flex items-center justify-between text-xs"
+        >
           <span class="text-neutral-500">Coolest:</span>
           <button
             type="button"

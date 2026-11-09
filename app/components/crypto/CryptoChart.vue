@@ -145,15 +145,15 @@ function resolveRangeConfig(range: '24H' | '7D' | '1M' | '3M' | '1Y') {
 }
 
 function handleRangeChange(range: '24H' | '7D' | '1M' | '3M' | '1Y') {
+  if (selectedRange.value === range) return
   selectedRange.value = range
   const config = resolveRangeConfig(range)
   selectedInterval.value = config.interval as '15m' | '1h' | '4h' | '1d'
-  loadAndRenderChart(true)
 }
 
 function handleIntervalChange(interval: '15m' | '1h' | '4h' | '1d') {
+  if (selectedInterval.value === interval) return
   selectedInterval.value = interval
-  loadAndRenderChart(true)
 }
 
 // Institutional SMA calculation supporting full lookback buffer & progressive expanding start

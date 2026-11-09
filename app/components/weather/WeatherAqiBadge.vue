@@ -2,18 +2,34 @@
 import type { AqiCategoryInfo } from '~/types/weather'
 
 const props = defineProps<{
-  aqi: number
+  aqi: number | null | undefined
   category?: AqiCategoryInfo
   size?: 'xs' | 'sm' | 'md'
   showLabel?: boolean
 }>()
+
+const isValidAqi = computed(() => {
+  return props.aqi !== null && props.aqi !== undefined && !isNaN(props.aqi)
+})
 
 const categoryInfo = computed(() => {
   if (props.category) return props.category
   return getAqiCategoryInfo(props.aqi)
 })
 
-function getAqiCategoryInfo(aqi: number): AqiCategoryInfo {
+function getAqiCategoryInfo(aqi: number | null | undefined): AqiCategoryInfo {
+  if (aqi === null || aqi === undefined || isNaN(aqi)) {
+    return {
+      level: 'good',
+      label: 'N/A',
+      color: 'neutral',
+      badgeClass: 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700',
+      textClass: 'text-neutral-500 dark:text-neutral-400',
+      bgClass: 'bg-neutral-400',
+      description: 'Not Available',
+      healthAdvisory: 'Air quality telemetry is currently unavailable.'
+    }
+  }
   if (aqi <= 50) {
     return {
       level: 'good',
@@ -100,7 +116,7 @@ function getAqiCategoryInfo(aqi: number): AqiCategoryInfo {
       class="w-1.5 h-1.5 rounded-full shrink-0"
       :class="categoryInfo.bgClass"
     />
-    <span>{{ Math.round(props.aqi) }}</span>
+    <span>{{ isValidAqi ? Math.round(props.aqi!) : 'N/A' }}</span>
     <span
       v-if="props.showLabel !== false"
       class="font-sans font-semibold opacity-90 text-[10px] tracking-tight"

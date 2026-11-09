@@ -77,6 +77,7 @@ const aqiDistribution = computed(() => {
   }
 
   for (const c of props.cities) {
+    if (c.usAqi == null || isNaN(c.usAqi)) continue
     if (c.usAqi <= 50) counts.good++
     else if (c.usAqi <= 100) counts.moderate++
     else if (c.usAqi <= 150) counts.sensitive++
@@ -213,7 +214,7 @@ const lineChartData = computed(() => {
   const maxVal = Math.max(...values)
   const delta = maxVal - minVal || 1
   const valRange = delta * 1.15 // padding
-  const baseline = Math.max(0, minVal - delta * 0.08)
+  const baseline = key === 'avgTemp' ? minVal - delta * 0.08 : Math.max(0, minVal - delta * 0.08)
 
   const innerW = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right
   const innerH = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
@@ -514,7 +515,7 @@ const maxStateAqi = computed(() => {
         </div>
 
         <div
-          v-if="props.pulse"
+          v-if="props.pulse && props.pulse.hottestCity && props.pulse.coldestCity"
           class="mt-2 grid grid-cols-2 gap-2 text-xs"
         >
           <!-- Hottest -->

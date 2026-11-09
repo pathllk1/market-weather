@@ -982,22 +982,22 @@ watch([comparisonMode, temporalSubMode], ([mode]) => {
               <div>
                 <div class="flex items-baseline gap-1">
                   <span class="text-3xl sm:text-4xl font-black font-mono text-neutral-900 dark:text-white">
-                    {{ item.city.temperature.toFixed(1) }}°
+                    {{ item.city.temperature != null ? item.city.temperature.toFixed(1) : '--' }}°
                   </span>
                   <span class="text-sm font-semibold text-neutral-400">C</span>
                 </div>
                 <div class="text-[11px] text-neutral-500 font-medium">
-                  Feels like {{ item.city.apparentTemperature.toFixed(1) }}°C
+                  Feels like {{ item.city.apparentTemperature != null ? item.city.apparentTemperature.toFixed(1) : '--' }}°C
                 </div>
               </div>
 
               <div class="flex flex-col items-end">
                 <UIcon
-                  :name="item.city.weatherCondition.icon || 'i-lucide-sun'"
+                  :name="item.city.weatherCondition?.icon || 'i-lucide-sun'"
                   class="h-8 w-8 text-neutral-800 dark:text-neutral-100"
                 />
                 <span class="text-xs font-bold text-neutral-700 dark:text-neutral-300 mt-1 text-right">
-                  {{ item.city.weatherCondition.description }}
+                  {{ item.city.weatherCondition?.description || 'Current Weather' }}
                 </span>
               </div>
             </div>
@@ -1273,7 +1273,7 @@ watch([comparisonMode, temporalSubMode], ([mode]) => {
                     'text-blue-600 dark:text-blue-400': item.name === comparisonStats?.coolest.name && comparedCities.length > 1
                   }"
                 >
-                  {{ item.city.temperature.toFixed(1) }}°C
+                  {{ item.city.temperature != null ? item.city.temperature.toFixed(1) : '--' }}°C
                   <span
                     v-if="item.name === comparisonStats?.warmest.name"
                     class="ml-1 text-[10px] font-bold text-amber-500"
@@ -1292,7 +1292,7 @@ watch([comparisonMode, temporalSubMode], ([mode]) => {
                   :key="`feel-${item.name}`"
                   class="px-4 py-3 text-right font-bold text-neutral-800 dark:text-neutral-200"
                 >
-                  {{ item.city.apparentTemperature.toFixed(1) }}°C
+                  {{ item.city.apparentTemperature != null ? item.city.apparentTemperature.toFixed(1) : '--' }}°C
                 </td>
               </tr>
 
