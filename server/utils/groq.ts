@@ -87,22 +87,32 @@ export async function generateAITechnicalReview(
     })
   }
 
-  const selectedModel = process.env.GROQ_MODEL?.trim() || 'llama-3.1-8b-instant'
+  const candidateModels = [
+    process.env.GROQ_MODEL?.trim(),
+    'openai/gpt-oss-20b',
+    'qwen/qwen3.8-27b',
+    'openai/gpt-oss-120b'
+  ].filter((m): m is string => Boolean(m && m !== 'llama-3.1-8b-instant'))
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: selectedModel,
-      response_format: { type: 'json_object' },
-      temperature: 0.2,
-      messages: [
-        {
-          role: 'system',
-          content: `You are an elite quantitative technical analyst specializing in Indian equity markets (NSE/BSE).
+  let response: Response | null = null
+  let usedModel = candidateModels[0] || 'openai/gpt-oss-20b'
+
+  for (const modelCandidate of candidateModels) {
+    usedModel = modelCandidate
+    response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: modelCandidate,
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        messages: [
+          {
+            role: 'system',
+            content: `You are an elite quantitative technical analyst specializing in Indian equity markets (NSE/BSE).
 Your task is to independently evaluate raw technical calculations and generate an unbiased technical review and independent AI score from 0 to 100.
 IMPORTANT RULES:
 1. You have NOT been given any internal score or predetermined rating. Evaluate purely based on mathematical confluence.
@@ -130,10 +140,10 @@ IMPORTANT RULES:
   },
   "tradingTactics": string (concrete guidance on entry zones, risk-reward setup, and trailing stops)
 }`
-        },
-        {
-          role: 'user',
-          content: `Analyze the following raw technical indicators for ${input.companyName} (${input.symbol}):
+          },
+          {
+            role: 'user',
+            content: `Analyze the following raw technical indicators for ${input.companyName} (${input.symbol}):
 
 Current Market Price: ₹${input.currentPrice} (${input.percentageChange >= 0 ? '+' : ''}${input.percentageChange.toFixed(2)}%)
 52-Week Range: High ₹${input.high52w ?? 'N/A'} | Low ₹${input.low52w ?? 'N/A'}
@@ -166,17 +176,27 @@ Volatility & Volume:
 - On-Balance Volume (OBV): ${input.volume?.obv !== undefined ? input.volume.obv.toLocaleString() : 'N/A'}
 
 Provide your independent quantitative assessment in JSON format.`
-        }
-      ]
+          }
+        ]
+      })
     })
-  })
 
-  if (!response.ok) {
-    const errText = await response.text()
-    console.error(`[Groq AI Review] Groq API returned status ${response.status}: ${errText}`)
+    if (response.ok) break
+
+    if (response.status === 404) {
+      console.warn(`[Groq AI Review] Model '${modelCandidate}' returned 404. Attempting fallback...`)
+      continue
+    }
+
+    break
+  }
+
+  if (!response || !response.ok) {
+    const errText = response ? await response.text() : 'No response from Groq API'
+    console.error(`[Groq AI Review] Groq API returned status ${response?.status}: ${errText}`)
     throw createError({
-      statusCode: response.status === 429 ? 429 : 502,
-      statusMessage: `Groq AI API error (${response.status}): ${response.statusText}`
+      statusCode: response?.status === 429 ? 429 : 502,
+      statusMessage: `Groq AI API error (${response?.status}): ${response?.statusText || 'Request Failed'}`
     })
   }
 
@@ -211,7 +231,7 @@ Provide your independent quantitative assessment in JSON format.`
         stopLoss: Number(parsed.technicalLevels?.stopLoss) || Number((input.currentPrice * 0.95).toFixed(2))
       },
       tradingTactics: parsed.tradingTactics || 'Manage risk according to technical support and resistance levels.',
-      modelUsed: `${selectedModel} (Groq)`,
+      modelUsed: `${usedModel} (Groq)`,
       generatedAt: formatMarketDateTime(Date.now()) || 'Just now',
       isCached: false,
       algorithmicScore

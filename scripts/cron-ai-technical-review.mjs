@@ -26,7 +26,14 @@ const env = loadEnv()
 const TURSO_URL = env.TURSO_DATABASE_URL || 'file:turso_security.db'
 const TURSO_AUTH_TOKEN = env.TURSO_AUTH_TOKEN || undefined
 const GROQ_API_KEY = env.GROQ_API_KEY?.trim()
-const GROQ_MODEL = env.GROQ_MODEL?.trim() || 'llama-3.1-8b-instant'
+const candidateModels = [
+  env.GROQ_MODEL?.trim(),
+  'openai/gpt-oss-20b',
+  'qwen/qwen3.8-27b',
+  'openai/gpt-oss-120b'
+].filter(m => Boolean(m && m !== 'llama-3.1-8b-instant'))
+
+let currentModel = candidateModels[0] || 'openai/gpt-oss-20b'
 
 if (!GROQ_API_KEY) {
   console.error('CRITICAL ERROR: GROQ_API_KEY is not defined in environment variables.')
@@ -89,7 +96,7 @@ async function callGroqWithRetry(payload, maxRetries = 3) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: GROQ_MODEL,
+          model: currentModel,
           response_format: { type: 'json_object' },
           temperature: 0.2,
           messages: [
@@ -136,11 +143,23 @@ IMPORTANT RULES:
         const json = await response.json()
         const content = json.choices?.[0]?.message?.content
         if (!content) throw new Error('Empty completion content from Groq model')
-        return JSON.parse(content)
+        const parsed = JSON.parse(content)
+        parsed._modelUsed = currentModel
+        return parsed
       }
 
       const status = response.status
       const errorText = await response.text()
+
+      // Model 404 / deprecated handling: automatically fallback to active candidate model
+      if (status === 404 && (errorText.includes('model_not_found') || errorText.includes('does not exist'))) {
+        const nextModel = candidateModels.find(m => m !== currentModel)
+        if (nextModel) {
+          console.warn(`[MODEL 404] '${currentModel}' is unavailable on Groq. Automatically switching to '${nextModel}'...`)
+          currentModel = nextModel
+          continue
+        }
+      }
 
       // Retryable errors: 429 (Rate Limit), 500, 502, 503, 504
       if (status === 429 || (status >= 500 && status <= 504)) {
@@ -174,7 +193,7 @@ async function main() {
   console.log('       AUTOMATED AI TECHNICAL REVIEW & SCORING PIPELINE')
   console.log('='.repeat(75))
   console.log(`Database URL      : ${TURSO_URL}`)
-  console.log(`Groq Model        : ${GROQ_MODEL}`)
+  console.log(`Groq Model        : ${currentModel}`)
   console.log(`Min Score Filter  : >= ${config.minScore}`)
   console.log(`Stock Limit       : ${config.limit > 0 ? config.limit : 'ALL matching'}`)
   console.log(`Batch Size        : ${config.batchSize} stocks / batch`)
@@ -365,7 +384,7 @@ Provide your independent quantitative assessment in JSON format.`
             JSON.stringify(Array.isArray(aiOutput.keyRisks) ? aiOutput.keyRisks : []),
             JSON.stringify(aiOutput.technicalLevels || {}),
             String(aiOutput.tradingTactics || ''),
-            `${GROQ_MODEL} (Groq)`,
+            `${aiOutput._modelUsed || currentModel} (Groq)`,
             Number(stock.overall_score || 0),
             now,
             now
@@ -404,7 +423,7 @@ Provide your independent quantitative assessment in JSON format.`
   console.log('='.repeat(75) + '\n')
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Fatal execution error:', err)
   process.exit(1)
 })
