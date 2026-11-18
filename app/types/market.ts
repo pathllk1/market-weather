@@ -28,6 +28,7 @@ export interface MarketSummaryBreadth {
   advancingCount: number
   decliningCount: number
   avgScore: number
+  lastSynced?: string
 }
 
 export interface ScreenerResponse {

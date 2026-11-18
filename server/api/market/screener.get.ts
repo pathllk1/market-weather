@@ -110,7 +110,8 @@ export default defineEventHandler(async (event) => {
       SUM(CASE WHEN overall_score > 35 AND overall_score < 75 THEN 1 ELSE 0 END) as neutral_count,
       AVG(overall_score) as avg_score,
       SUM(CASE WHEN percentage_change > 0 THEN 1 ELSE 0 END) as advancing_count,
-      SUM(CASE WHEN percentage_change < 0 THEN 1 ELSE 0 END) as declining_count
+      SUM(CASE WHEN percentage_change < 0 THEN 1 ELSE 0 END) as declining_count,
+      MAX(last_updated) as latest_sync
     FROM technical_analysis
   `)
 
@@ -131,7 +132,8 @@ export default defineEventHandler(async (event) => {
       neutralCount: Number(summaryRow.neutral_count || 0),
       advancingCount: Number(summaryRow.advancing_count || 0),
       decliningCount: Number(summaryRow.declining_count || 0),
-      avgScore: Math.round(Number(summaryRow.avg_score || 0))
+      avgScore: Math.round(Number(summaryRow.avg_score || 0)),
+      lastSynced: formatMarketDateTime(summaryRow.latest_sync)
     }
   }
 })

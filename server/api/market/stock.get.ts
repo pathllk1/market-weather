@@ -105,7 +105,7 @@ export default defineEventHandler(async (event) => {
     percentageChange,
     overallScore,
     overallRating,
-    lastUpdated: String(tech.last_updated),
+    lastUpdated: formatMarketDateTime(tech.last_updated) || String(tech.last_updated),
     ranges: {
       high52w: Number(stats.high_52w || 0),
       low52w: Number(stats.low_52w || 0),

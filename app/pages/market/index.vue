@@ -30,14 +30,15 @@ const pagination = ref({
   limit: 20,
   totalPages: 1
 })
-const summary = ref({
+const summary = ref<MarketSummaryBreadth>({
   totalStocks: 0,
   bullishCount: 0,
   bearishCount: 0,
   neutralCount: 0,
   advancingCount: 0,
   decliningCount: 0,
-  avgScore: 0
+  avgScore: 0,
+  lastSynced: undefined
 })
 
 // --- Custom Views (OHLCV) State ---
@@ -497,6 +498,16 @@ onUnmounted(() => {
 
       <!-- Quick Metrics Ribbon (Single row, compact badges) -->
       <div class="flex items-center flex-wrap gap-2 text-[11px]">
+        <div
+          v-if="summary.lastSynced"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/60 px-2.5 py-1"
+          :title="`Database Sync: ${summary.lastSynced}`"
+        >
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span class="text-neutral-500 dark:text-neutral-400 text-[10px] font-medium">Last synced:</span>
+          <span class="font-mono font-bold text-neutral-800 dark:text-neutral-200">{{ summary.lastSynced }}</span>
+        </div>
+
         <div class="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/60 px-2.5 py-1">
           <span class="text-neutral-500 dark:text-neutral-400 text-[10px] font-medium">Breadth:</span>
           <span class="font-bold text-emerald-600 dark:text-emerald-400">{{ summary.advancingCount }} Adv</span>
@@ -800,7 +811,7 @@ onUnmounted(() => {
                   <!-- Relative Time of Last Sync -->
                   <span
                     class="text-[11px] text-neutral-500 dark:text-neutral-400 font-mono hidden sm:inline-block"
-                    :title="lastUpdatedTime ? lastUpdatedTime.toLocaleTimeString() : ''"
+                    :title="lastUpdatedTime ? (formatMarketDateTime(lastUpdatedTime) || '') : ''"
                   >
                     {{ lastUpdatedText }}
                   </span>
@@ -949,7 +960,16 @@ onUnmounted(() => {
               />
             </div>
 
-            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <div class="flex items-center gap-2.5 w-full sm:w-auto justify-end flex-wrap">
+              <span
+                v-if="summary.lastSynced"
+                class="text-xs text-neutral-500 dark:text-neutral-400 font-mono hidden md:inline-flex items-center gap-1.5 mr-1"
+                :title="`Turso Database Sync: ${summary.lastSynced}`"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span>Last synced: <strong class="text-neutral-800 dark:text-neutral-200 font-semibold">{{ summary.lastSynced }}</strong></span>
+              </span>
+
               <span class="text-xs text-muted">Rows:</span>
               <div class="flex gap-1">
                 <UButton

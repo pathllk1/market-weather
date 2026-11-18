@@ -212,7 +212,7 @@ Provide your independent quantitative assessment in JSON format.`
       },
       tradingTactics: parsed.tradingTactics || 'Manage risk according to technical support and resistance levels.',
       modelUsed: `${selectedModel} (Groq)`,
-      generatedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      generatedAt: formatMarketDateTime(Date.now()) || 'Just now',
       isCached: false,
       algorithmicScore
     }

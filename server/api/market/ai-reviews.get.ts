@@ -34,14 +34,13 @@ export default defineEventHandler(async (event): Promise<AIReviewsListResponse> 
     `)
     const row = statsRes.rows[0]
     if (row) {
-      const latestTs = Number(row.latest_update)
       stats = {
         total: Number(row.total || 0),
         bullishCount: Number(row.bullish_count || 0),
         bearishCount: Number(row.bearish_count || 0),
         neutralCount: Number(row.neutral_count || 0),
         avgAiScore: Number(row.avg_score || 0),
-        lastRunTime: !isNaN(latestTs) && latestTs > 0 ? new Date(latestTs).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : undefined
+        lastRunTime: formatMarketDateTime(row.latest_update)
       }
     }
   } catch (statsErr) {
@@ -112,8 +111,6 @@ export default defineEventHandler(async (event): Promise<AIReviewsListResponse> 
         // fallback
       }
 
-      const updatedTs = Number(row.updated_at)
-
       return {
         symbol: String(row.symbol),
         companyName: String(row.company_name),
@@ -128,9 +125,7 @@ export default defineEventHandler(async (event): Promise<AIReviewsListResponse> 
         technicalLevels,
         tradingTactics: String(row.trading_tactics),
         modelUsed: String(row.model_used),
-        generatedAt: !isNaN(updatedTs) && updatedTs > 0
-          ? new Date(updatedTs).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-          : 'N/A',
+        generatedAt: formatMarketDateTime(row.updated_at) || 'N/A',
         isCached: true,
         algorithmicScore: Number(row.algorithmic_score)
       }

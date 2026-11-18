@@ -135,7 +135,7 @@ function fmtCur(val?: number) {
           v-if="review?.generatedAt"
           class="text-[11px] text-neutral-400 font-mono"
         >
-          • Generated {{ review.generatedAt }}
+          • Generated {{ formatMarketDateTime(review.generatedAt) || review.generatedAt }}
         </span>
       </div>
 

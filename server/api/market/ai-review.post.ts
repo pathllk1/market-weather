@@ -69,7 +69,7 @@ export default defineEventHandler(async (event) => {
           technicalLevels,
           tradingTactics: String(saved.trading_tactics),
           modelUsed: String(saved.model_used),
-          generatedAt: new Date(Number(saved.updated_at)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+          generatedAt: formatMarketDateTime(saved.updated_at) || 'N/A',
           isCached: true,
           algorithmicScore: Number(saved.algorithmic_score)
         }

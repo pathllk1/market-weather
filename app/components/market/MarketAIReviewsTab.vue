@@ -187,13 +187,16 @@ function handleRatingChange(newRating: string) {
 
       <!-- Automation Status -->
       <div class="p-3.5 rounded-2xl bg-neutral-100/80 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700/60 shadow-2xs col-span-2 sm:col-span-4 lg:col-span-1 flex items-center justify-between lg:flex-col lg:items-start lg:justify-center">
-        <div>
+        <div class="min-w-0 pr-2">
           <div class="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
             <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             <span>GitHub Cron Sync</span>
           </div>
-          <div class="text-xs font-semibold text-neutral-900 dark:text-white mt-0.5">
-            {{ data?.stats.lastRunTime ? `Updated at ${data.stats.lastRunTime}` : 'Automated Daily' }}
+          <div
+            class="text-xs font-semibold text-neutral-900 dark:text-white mt-0.5 truncate"
+            :title="data?.stats.lastRunTime ? `Last synced: ${data.stats.lastRunTime}` : 'Automated Daily'"
+          >
+            {{ data?.stats.lastRunTime ? `Last synced: ${data.stats.lastRunTime}` : 'Automated Daily' }}
           </div>
         </div>
         <UButton

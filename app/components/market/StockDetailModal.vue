@@ -265,7 +265,12 @@ function handleTradeClick(type: 'BUY' | 'SELL' = 'BUY') {
           </div>
           <div>
             <span class="text-muted text-[10px] block">Last Analysis Sync</span>
-            <span class="text-muted truncate block">{{ stockData.lastUpdated }}</span>
+            <span
+              class="text-muted truncate block"
+              :title="formatMarketDateTime(stockData.lastUpdated) || stockData.lastUpdated"
+            >
+              {{ formatMarketDateTime(stockData.lastUpdated) || stockData.lastUpdated }}
+            </span>
           </div>
         </div>
 
