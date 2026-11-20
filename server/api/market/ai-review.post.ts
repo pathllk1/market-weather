@@ -70,6 +70,7 @@ export default defineEventHandler(async (event) => {
           tradingTactics: String(saved.trading_tactics),
           modelUsed: String(saved.model_used),
           generatedAt: formatMarketDateTime(saved.updated_at) || 'N/A',
+          updatedAt: Number(saved.updated_at || 0),
           isCached: true,
           algorithmicScore: Number(saved.algorithmic_score)
         }

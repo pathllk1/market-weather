@@ -233,6 +233,7 @@ Provide your independent quantitative assessment in JSON format.`
       tradingTactics: parsed.tradingTactics || 'Manage risk according to technical support and resistance levels.',
       modelUsed: `${usedModel} (Groq)`,
       generatedAt: formatMarketDateTime(Date.now()) || 'Just now',
+      updatedAt: Date.now(),
       isCached: false,
       algorithmicScore
     }

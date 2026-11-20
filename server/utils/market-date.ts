@@ -62,7 +62,7 @@ export function formatMarketDateTime(raw: unknown): string | undefined {
 
     if (remainder) {
       const timeMatch = remainder.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([a-zA-Z]+)?$/)
-      if (timeMatch) {
+      if (timeMatch && timeMatch[1] && timeMatch[2]) {
         const h = timeMatch[1].padStart(2, '0')
         const m = timeMatch[2]
         const ampm = (timeMatch[3] || '').toLowerCase()

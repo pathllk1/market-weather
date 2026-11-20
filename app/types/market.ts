@@ -250,6 +250,7 @@ export interface AITechnicalReviewResponse {
   tradingTactics: string
   modelUsed: string
   generatedAt: string
+  updatedAt?: number
   isCached: boolean
   algorithmicScore: number
 }
@@ -263,6 +264,9 @@ export interface AIReviewsListResponse {
     neutralCount: number
     avgAiScore: number
     lastRunTime?: string
+    latestBatchCount?: number
+    todayCount?: number
+    latestRunTimestamp?: number
   }
   reviews: AITechnicalReviewResponse[]
 }
